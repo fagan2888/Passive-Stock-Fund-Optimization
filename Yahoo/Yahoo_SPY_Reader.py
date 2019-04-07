@@ -40,7 +40,7 @@ def save_to_database():
 def main():
 
     #df=pull_spy_list()
-    
+    #Pull the list of S&P Stocks
     spylist = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
     table = spylist[0]
 
