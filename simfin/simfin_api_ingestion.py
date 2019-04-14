@@ -4,10 +4,22 @@ import pandas as pd
 import requests
 import re
 
+"""
+TO-DO:
+    1) Clean-up/finish code for statements and shares ingestion;
+    2) Add code for ratios ingestion;
+    3) Add code for TTM statements ingestion
+    4) Rewrite more flexible/interactive master/driver code (i.e. processing
+       individual statements, quarters, and years; outputting intermediares)
+    5) Hook up to PostgreSQL database on Google instance (need Satya)
+    6) Write Fama-French ingestion code
+    7) Write WRDS/CRSP ingestion code
+"""
+
 # Set key and desired statement-type mnemonic
 key = 'uE2UvVxIDNLPEQLbQ0WXc86A1leCxVuu'
 
-def set_key(key='uE2UvVxIDNLPEQLbQ0WXc86A1leCxVuu'):
+def set_key(key):
     """
     Instantiates an API key object to pull from the SimFin API.
     """
@@ -123,6 +135,71 @@ def get_statement_data(sim_ids,
         
     return(data, dfs)
     
+def get_single_statement_data(sim_ids,
+                              api_key,
+                              tickers,
+                              statement_type,
+                              year,
+                              quarter
+                              ):
+    """
+    Pulls SimFin financial statement data programatically from the SimFin API. 
+    Takes as input a specified year-quarter pair, and statement-type 
+    mnemonic. In addition, relies on a list of sim IDs, tickers and user's API 
+    key from previously defined functions to interact with the API.
+    """
+
+    data = {}
+    dfs = []
+    for idx, sim_id in enumerate(sim_ids):
+        print("Processing {} statements".format(tickers[idx]))
+        d = data[tickers[idx]] = {"Line Item": []}
+        if sim_id is not None:
+            period_identifier = quarter + "-" + str(year)
+
+                if period_identifier not in d:
+                    d[period_identifier] = []
+
+                url = f'https://simfin.com/api/v1/companies/id/{sim_id}/statements/standardised?stype={statement_type}&fyear={year}&ptype={quarter}&api-key={api_key}'
+
+                content = requests.get(url)
+                statement_data = content.json()
+
+                # Collect line item names once; consistent across entities
+                if len(d['Line Item']) == 0:
+                    d['Line Item'] = [x['standardisedName'] for x in statement_data['values']]
+
+                if 'values' in statement_data:
+                    for item in statement_data['values']:
+                        d[period_identifier].append(item['valueChosen'])
+                else:
+                    # No data found for time period
+                    d[period_identifier] = [None for _ in d['Line Item']]
+
+        # Convert to pandas DataFrame and melt down quarter columns
+        df = pd.DataFrame(data=d)
+        cols = df.columns.drop('Line Item')
+        df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
+
+        melted_df = df.melt(id_vars='Line Item', var_name='date')
+
+        # Cast 'Line Item' data across columns
+        pivoted_df = pd.pivot_table(melted_df,
+                                    values='value',
+                                    index=['date'],
+                                    columns=['Line Item']
+                                    )
+        pivoted_df.reset_index(inplace=True)
+        pivoted_df['ticker'] = tickers[idx]
+
+        # Slugify columns
+        pivoted_df.rename(columns=lambda x: slugify(x), inplace=True)
+
+        # Append for export
+        dfs.append(pivoted_df)
+        
+    return(data, dfs)
+    
 def get_shares_data(sim_ids,
                     api_key,
                     tickers
@@ -176,7 +253,7 @@ def get_ratios_data(sim_ids,
         print("Processing {} shares data".format(tickers[idx]))
         if sim_id is not None:
             
-            url = f'https://simfin.com/api/v1/companies/id/{sim_id}/shares/aggregated?&api-key={api_key}'
+            url = f'https://simfin.com/api/v1/companies/id/{sim_id}/ratios?&api-key={api_key}'
             
             # Query SimFin API
             content = requests.get(url)
@@ -195,7 +272,7 @@ def get_ratios_data(sim_ids,
             # Append for export
             dfs.append(shares_df)
         
-    return(dfs)  
+    return(dfs) 
 
 def main(key=key):
     """
