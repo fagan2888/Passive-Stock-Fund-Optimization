@@ -65,7 +65,7 @@ def main(key):
     # Pull all Sim IDs associated with S&P 500 tickers
     api_key = set_key(key)
     tickers = get_tickers()
-    sim_ids = get_sim_ids(tickers[0:10], api_key)
+    sim_ids = get_sim_ids(tickers, api_key)
     
     # Create dataframe to export or load directly into PostgreSQL database
     ticker_id_map = pd.DataFrame(list(zip(tickers, sim_ids)), 
