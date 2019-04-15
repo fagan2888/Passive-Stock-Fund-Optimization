@@ -6,18 +6,11 @@ import re
 
 """
 TO-DO:
-    1) Clean-up/finish code for statements and shares ingestion;
-    2) Add code for ratios ingestion;
-    3) Add code for TTM statements ingestion
-    4) Rewrite more flexible/interactive master/driver code (i.e. processing
-       individual statements, quarters, and years; outputting intermediares)
-    5) Hook up to PostgreSQL database on Google instance (need Satya)
-    6) Write Fama-French ingestion code
-    7) Write WRDS/CRSP ingestion code
+    1) Set up a way to set dynamic dates for TTM ingestion
+    2) Hook up to PostgreSQL database on Google instance (need Satya)
+    3) Write Fama-French ingestion code (?)
+    4) Write WRDS/CRSP ingestion code (?)
 """
-
-# Set key and desired statement-type mnemonic
-key = 'uE2UvVxIDNLPEQLbQ0WXc86A1leCxVuu'
 
 def set_key(key):
     """
