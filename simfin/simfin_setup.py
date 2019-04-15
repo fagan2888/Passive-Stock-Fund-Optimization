@@ -43,7 +43,8 @@ def get_sim_ids(tickers, api_key):
         if "error" in data or len(data) < 1:
             sim_ids.append(None)
         else:
-            sim_ids.append(data[0]['simId'])
+            for i in range(len(data)):
+                sim_ids.append((data[i]['ticker'], data[i]['simId']))
 
     return(sim_ids)
     
@@ -54,7 +55,7 @@ def load_sim_ids():
     """
     ticker_id_map = pd.read_csv('ticker_id_map.csv')
     tickers = ticker_id_map['ticker'].tolist()
-    sim_ids = ticker_id_map['sim_id'].tolist()
+    sim_ids = ticker_id_map['sim_id'].fillna(0).astype('int').tolist()
     return(tickers, sim_ids)
     
 def main(key):
@@ -68,8 +69,7 @@ def main(key):
     sim_ids = get_sim_ids(tickers, api_key)
     
     # Create dataframe to export or load directly into PostgreSQL database
-    ticker_id_map = pd.DataFrame(list(zip(tickers, sim_ids)), 
-                                 columns=["ticker", "sim_id"])
+    ticker_id_map = pd.DataFrame(sim_ids, columns=["ticker", "sim_id"])
     
     # Export
     fname = 'ticker_id_map'

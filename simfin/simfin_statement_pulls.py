@@ -43,10 +43,14 @@ def get_single_statement(sim_ids,
         print("Processing {} statements".format(tickers[idx]))
         d = data[tickers[idx]] = {"Line Item": []}
         if sim_id is not None:
-            period_identifier = quarter + "-" + str(year)
+            
+            if 'TTM' not in quarter:
+                period_identifier = quarter + "-" + str(year)
+            else: 
+                period_identifier = quarter
 
-                if period_identifier not in d:
-                    d[period_identifier] = []
+            if period_identifier not in d:
+                d[period_identifier] = []
 
                 url = f'https://simfin.com/api/v1/companies/id/{sim_id}/statements/standardised?stype={statement_type}&fyear={year}&ptype={quarter}&api-key={api_key}'
 
