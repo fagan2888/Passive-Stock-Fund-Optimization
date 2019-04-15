@@ -4,6 +4,9 @@ Set up interface with SimFin API using quarter-year-statement inputs to reduce
 API hits and avoid duplicitous pulling/storage of data; standardizes creation
 of intermediary data sets to load into Postgres DB
 
+TO-DO:
+    Set up dynamic dating convention for TTM periods
+
 04/14/2019
 Jared Berry
 """
@@ -42,7 +45,7 @@ def get_single_statement(sim_ids,
     for idx, sim_id in enumerate(sim_ids):
         print("Processing {} statements".format(tickers[idx]))
         d = data[tickers[idx]] = {"Line Item": []}
-        if sim_id is not None:
+        if sim_id != 0:
             
             if 'TTM' not in quarter:
                 period_identifier = quarter + "-" + str(year)
@@ -68,27 +71,27 @@ def get_single_statement(sim_ids,
                     # No data found for time period
                     d[period_identifier] = [None for _ in d['Line Item']]
 
-        # Convert to pandas DataFrame and melt down quarter columns
-        df = pd.DataFrame(data=d)
-        cols = df.columns.drop('Line Item')
-        df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
-
-        melted_df = df.melt(id_vars='Line Item', var_name='date')
-
-        # Cast 'Line Item' data across columns
-        pivoted_df = pd.pivot_table(melted_df,
-                                    values='value',
-                                    index=['date'],
-                                    columns=['Line Item']
-                                    )
-        pivoted_df.reset_index(inplace=True)
-        pivoted_df['ticker'] = tickers[idx]
-
-        # Slugify columns
-        pivoted_df.rename(columns=lambda x: slugify(x), inplace=True)
-
-        # Append for export
-        dfs.append(pivoted_df)
+            # Convert to pandas DataFrame and melt down quarter columns
+            df = pd.DataFrame(data=d)
+            cols = df.columns.drop('Line Item')
+            df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
+    
+            melted_df = df.melt(id_vars='Line Item', var_name='date')
+    
+            # Cast 'Line Item' data across columns
+            pivoted_df = pd.pivot_table(melted_df,
+                                        values='value',
+                                        index=['date'],
+                                        columns=['Line Item']
+                                        )
+            pivoted_df.reset_index(inplace=True)
+            pivoted_df['ticker'] = tickers[idx]
+    
+            # Slugify columns
+            pivoted_df.rename(columns=lambda x: slugify(x), inplace=True)
+    
+            # Append for export
+            dfs.append(pivoted_df)
         
     return(data, dfs)
 

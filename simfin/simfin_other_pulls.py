@@ -2,6 +2,9 @@
 """
 Set up interface with SimFin API for non-statment pulls to reduce API hits
 
+TO-DO:
+    Find out where nan tickers are coming from and what they contain
+
 04/14/2019
 Jared Berry
 """
@@ -21,8 +24,8 @@ def get_shares_data(sim_ids, api_key, tickers, prices=False):
 
     dfs = []
     for idx, sim_id in enumerate(sim_ids):
-        print("Processing {} shares data".format(tickers[idx]))
-        if sim_id is not None:
+        if sim_id != 0:
+            print("Processing {} shares data".format(tickers[idx]))
             
             if prices:
                 
@@ -33,6 +36,9 @@ def get_shares_data(sim_ids, api_key, tickers, prices=False):
                 content = requests.get(url)
                 shares_data = content.json() 
 
+                if "error" in shares_data:
+                    continue
+                
                 shares_df = pd.DataFrame(shares_data)
                 
             else:
@@ -42,7 +48,10 @@ def get_shares_data(sim_ids, api_key, tickers, prices=False):
                 
                 # Query SimFin API
                 content = requests.get(url)
-                shares_data = content.json()                
+                shares_data = content.json()
+                
+                if "error" in shares_data:
+                    continue
                     
                 # Convert list of JSON blobs to pandas dataframe
                 cols = list(shares_data[0].keys())
@@ -70,8 +79,8 @@ def get_ratios_data(sim_ids, api_key, tickers):
 
     dfs = []
     for idx, sim_id in enumerate(sim_ids):
-        print("Processing {} shares data".format(tickers[idx]))
-        if sim_id is not None:
+        if sim_id != 0:
+            print("Processing {} shares data".format(tickers[idx]))
             
             url = f'https://simfin.com/api/v1/companies/id/{sim_id}/ratios?&api-key={api_key}'
             

@@ -4,14 +4,6 @@ import pandas as pd
 import requests
 import re
 
-"""
-TO-DO:
-    1) Set up a way to set dynamic dates for TTM ingestion
-    2) Hook up to PostgreSQL database on Google instance (need Satya)
-    3) Write Fama-French ingestion code (?)
-    4) Write WRDS/CRSP ingestion code (?)
-"""
-
 def set_key(key):
     """
     Instantiates an API key object to pull from the SimFin API.
