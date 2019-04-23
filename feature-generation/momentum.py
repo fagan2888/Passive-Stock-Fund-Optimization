@@ -1,3 +1,19 @@
+"""Stock feature generation including momentum indicators and volatility
+
+    Currently RSI (Relative Strength Index) is successfully calculated for each stock
+    and for each day based on the basic price data ingested from yahoo. To Run the program,
+    the stock_price_until_2019_04_03.csv file must be located in the same directory as this
+    file. The output of the prgram will be an updated csv file with a new column with the
+    rsi values.
+
+    TODO: volatility, percent off 52 week high, stock relative rank (based on price performance), and Sharp Ratio
+
+George Krug
+04/22/2019
+"""
+
+
+
 import pandas as pd
 from talib import RSI, BBANDS
 import matplotlib.pyplot as plt
@@ -30,8 +46,8 @@ def get_stock_sharp_ratio():
 def main():
 
     print('Generating Momentum Features\n-------------------------------------------------------------')
-    file_path = "../data/stock_price_until_2019_04_03.csv"
-    output_file_path = "../data/momentum-features.csv"
+    file_path = "stock_price_until_2019_04_03.csv"
+    output_file_path = "momentum-features.csv"
 
     try:
         df = pd.read_csv(file_path)
@@ -39,13 +55,9 @@ def main():
         print("FileNotFoundError with path " + file_path + "\nError: " + err)
         raise
 
-    print('converting 2d to 3d dataframe...........')
-
     # Set Multi Index on the dataframe to get the 3d data structure
     df.set_index(['Symbol','Date'], inplace=True)
     print('Done')
-    # Example lookup
-    #print(df.loc['AAPL'].loc[:,'AdjClose'].tail())
 
     # Add Columns to the dataframe and initialize to -1
     df['RSI'] = -1
@@ -58,7 +70,6 @@ def main():
 
     print('Updating Dataframe with RSI values......')
     start = time.time()
-    print(df.loc['AAPL']['RSI'])
     for symbol, mrow in df.groupby(level=0):
         counter = 0
         print(symbol)
@@ -78,9 +89,10 @@ def main():
         print(df.loc[symbol, 'RSI'])
         """
 
+    print("Writing to file: " + output_file_path)
+    df.to_csv(output_file_path, encoding='utf-8', index=False)
     end = time.time()
     print("Process time: " + str(end - start) + " seconds.")
-    df.to_csv(output_file_path, encoding='utf-8', index=False)
 
 
 if __name__ == '__main__':
