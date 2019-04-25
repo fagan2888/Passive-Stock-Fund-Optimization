@@ -55,21 +55,21 @@ def get_single_statement(sim_ids,
             if period_identifier not in d:
                 d[period_identifier] = []
 
-                url = f'https://simfin.com/api/v1/companies/id/{sim_id}/statements/standardised?stype={statement_type}&fyear={year}&ptype={quarter}&api-key={api_key}'
+            url = f'https://simfin.com/api/v1/companies/id/{sim_id}/statements/standardised?stype={statement_type}&fyear={year}&ptype={quarter}&api-key={api_key}'
 
-                content = requests.get(url)
-                statement_data = content.json()
+            content = requests.get(url)
+            statement_data = content.json()
 
-                # Collect line item names once; consistent across entities
-                if len(d['Line Item']) == 0:
-                    d['Line Item'] = [x['standardisedName'] for x in statement_data['values']]
+            # Collect line item names once; consistent across entities
+            if len(d['Line Item']) == 0 and 'values' in statement_data:
+                d['Line Item'] = [x['standardisedName'] for x in statement_data['values']]
 
-                if 'values' in statement_data:
-                    for item in statement_data['values']:
-                        d[period_identifier].append(item['valueChosen'])
-                else:
-                    # No data found for time period
-                    d[period_identifier] = [None for _ in d['Line Item']]
+            if 'values' in statement_data:
+                for item in statement_data['values']:
+                    d[period_identifier].append(item['valueChosen'])
+            else:
+                # No data found for time period
+                d[period_identifier] = [None for _ in d['Line Item']]
 
             # Convert to pandas DataFrame and melt down quarter columns
             df = pd.DataFrame(data=d)
@@ -91,9 +91,10 @@ def get_single_statement(sim_ids,
             pivoted_df.rename(columns=lambda x: slugify(x), inplace=True)
     
             # Append for export
-            dfs.append(pivoted_df)
+            if not pivoted_df.empty:
+                dfs.append(pivoted_df)
         
-    return(data, dfs)
+    return(dfs)
 
 def main(key, statement_type, year, quarter):
     """
