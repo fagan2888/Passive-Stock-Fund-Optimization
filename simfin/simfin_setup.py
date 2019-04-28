@@ -6,9 +6,9 @@ Set up SimFin IDs to interface with SimFin API and reduce duplicitous API hits
 Jared Berry
 """
 
+import driver
 import pandas as pd
 import requests
-import sys
 
 def set_key(key):
     """
@@ -79,5 +79,4 @@ def main(key):
     ## ticker_id_map.to_sql(fname, con)   
     
 if __name__ == '__main__':
-    key = str(sys.argv[1])
-    main(key)
+    main(driver.key)

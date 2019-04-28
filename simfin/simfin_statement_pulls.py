@@ -4,17 +4,15 @@ Set up interface with SimFin API using quarter-year-statement inputs to reduce
 API hits and avoid duplicitous pulling/storage of data; standardizes creation
 of intermediary data sets to load into Postgres DB
 
-TO-DO:
-    Set up dynamic dating convention for TTM periods
-
 04/14/2019
 Jared Berry
 """
+
+import driver
 import simfin_setup
 import pandas as pd
 import requests
 import re
-import sys
 
 def slugify(value):
     """
@@ -43,9 +41,9 @@ def get_single_statement(sim_ids,
     data = {}
     dfs = []
     for idx, sim_id in enumerate(sim_ids):
-        print("Processing {} statements".format(tickers[idx]))
         d = data[tickers[idx]] = {"Line Item": []}
         if sim_id != 0:
+            print("Processing {} statements".format(tickers[idx]))
             
             if 'TTM' not in quarter:
                 period_identifier = quarter + "-" + str(year)
@@ -96,7 +94,7 @@ def get_single_statement(sim_ids,
         
     return(dfs)
 
-def main(key, statement_type, year, quarter):
+def main(key, statement_types, years, quarters):
     """
     Main execution
     """
@@ -105,27 +103,53 @@ def main(key, statement_type, year, quarter):
     api_key = simfin_setup.set_key(key)
     tickers, sim_ids = simfin_setup.load_sim_ids()
     
+    # Load process file if boolean specified in driver to avoid extra pulls
+    if driver.use_process_file:
+        try:
+            process_file = pd.read_csv('process_file.csv')
+            cols = process_file.columns.tolist()
+        except (FileNotFoundError):
+            cols = ['statement_type', 'year', 'quarter']
+            process_file = pd.DataFrame(columns=cols)
+            
+        file_ids = list(zip(process_file['statement_type'].tolist(), 
+                            process_file['year'].tolist(), 
+                            process_file['quarter'].tolist()))
+
     # SimFin statements -------------------------------------------------------
-    simfin_statements = get_single_statement(sim_ids=sim_ids,
-                                         tickers=tickers,
-                                         api_key=api_key,
-                                         statement_type=statement_type,
-                                         year=year,
-                                         quarter=quarter)
+    for s in statement_types:
+        for y in years:
+            for q in quarters:
 
-    # Stack SimFin DataFrames
-    simfin_statement_data = pd.concat(simfin_statements, axis=0)
-
-    # Export
-    fname = 'simfin_{}_{}_{}'.format(statement_type, quarter, year)
-    simfin_statement_data.to_csv('{}.csv'.format(fname), index=False)
-    ## dbpath='/Users/syandra/Documents/sqlite-tools-osx-x86-3270200/capstone.db'
-    ## con = sqlite3.connect(dbpath)
-    ## simfin_statement_data.to_sql(fname, con)
+                if driver.use_process_file:
+                    file_id = (s, int(y), q)
+                    if file_id in file_ids:
+                        continue
+                
+                simfin_statements = get_single_statement(sim_ids=sim_ids,
+                                                     tickers=tickers,
+                                                     api_key=api_key,
+                                                     statement_type=s,
+                                                     year=y,
+                                                     quarter=q)
+    
+                # Stack SimFin DataFrames
+                simfin_statement_data = pd.concat(simfin_statements, axis=0)
+            
+                # Export
+                fname = 'simfin_{}_{}_{}'.format(s, q, y)
+                simfin_statement_data.to_csv('{}.csv'.format(fname), index=False)
+                ## dbpath='/Users/syandra/Documents/sqlite-tools-osx-x86-3270200/capstone.db'
+                ## con = sqlite3.connect(dbpath)
+                ## simfin_statement_data.to_sql(fname, con)
+                
+                # Record in process file, if boolean specified in driver
+                if driver.use_process_file:
+                    new_entry = pd.DataFrame([file_id], columns=cols)
+                    process_file = process_file.append(new_entry)
+                                    
+    if driver.use_process_file:
+        process_file.to_csv('process_file.csv', index=False)
 
 if __name__ == '__main__':
-    key = str(sys.argv[1])
-    statement_type = str(sys.argv[2])
-    year = str(sys.argv[3])
-    quarter = str(sys.argv[4])
-    main(key, statement_type, year, quarter)
+    main(driver.key, driver.statement_types, driver.years, driver.quarters)
