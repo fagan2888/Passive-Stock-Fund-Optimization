@@ -41,20 +41,6 @@ def get_stock_percent_off_52_week_high():
     pass
 
 
-def add_return_rank(df, ticker_list, date_list):
-
-    new_df = df
-    new_df["Return_Rank"] = -1
-    print(new_df.head(500))
-    for date in date_list:
-        for symbol in ticker_list:
-            try:
-                if not math.isnan(df.loc[symbol, date].loc['Pct_Change_Yearly']):
-                    pass
-            except Exception as err:
-                pass
-
-
 def get_stock_trailing_52_week_performance_rank(df, ticker_list, date_list):
     rank_df = pd.DataFrame()
     counter = -1
