@@ -9,10 +9,10 @@ TO-DO:
 Jared Berry
 """
 
+import driver
 import simfin_setup
 import pandas as pd
 import requests
-import sys
 
 def get_shares_data(sim_ids, api_key, tickers, prices=False):
     """
@@ -142,23 +142,7 @@ def main(key):
     simfin_share_price_data.to_csv('{}.csv'.format(fname), index=False)
     ## dbpath='/Users/syandra/Documents/sqlite-tools-osx-x86-3270200/capstone.db'
     ## con = sqlite3.connect(dbpath)
-    ## simfin_share_price_data.to_sql(fname, con)   
-    
-    # SimFin ratios -----------------------------------------------------------
-    simfin_ratios = get_ratios_data(sim_ids=sim_ids,
-                                    tickers=tickers,
-                                    api_key=api_key)
-
-    # Stack SimFin DataFrames
-    simfin_ratios_data = pd.concat(simfin_ratios, axis=0)
-
-    # Export
-    fname = 'simfin_ratios'
-    simfin_ratios_data.to_csv('{}.csv'.format(fname), index=False)
-    ## dbpath='/Users/syandra/Documents/sqlite-tools-osx-x86-3270200/capstone.db'
-    ## con = sqlite3.connect(dbpath)
-    ## simfin_ratios_data.to_sql(fname, con)       
+    ## simfin_share_price_data.to_sql(fname, con)       
     
 if __name__ == '__main__':
-    key = str(sys.argv[1])
-    main(key)
+    main(driver.key)
