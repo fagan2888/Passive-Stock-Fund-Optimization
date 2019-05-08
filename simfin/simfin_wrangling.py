@@ -4,16 +4,19 @@ Wrangling code for Simfin statements and shares data sets, preparing for merge
 onto daily Yahoo! Finance data
 
 TO-DO:
-    Replace placeholder read_csv commands with pulls from instance PostgreSQL DB
+    Add pulls from instance PostgreSQL DB
 
 04/28/2019
 Jared Berry
 """
 
 import simfin_setup
+import driver
 import pandas as pd
 from functools import reduce
 import re
+import pandas.io.sql as psql
+from sqlalchemy import create_engine
 
 def slugify(value):
     """
@@ -27,11 +30,15 @@ def slugify(value):
 
 def main():
     
-    # Read data into memory - REPLACE W/SELECT * PULLS FROM POSTGRESQL
-    cf_data = pd.concat([pd.read_csv('simfin_cf_Q1_2011.csv'), pd.read_csv('simfin_cf_Q2_2011.csv')])
-    pl_data = pd.concat([pd.read_csv('simfin_pl_Q1_2011.csv'), pd.read_csv('simfin_pl_Q2_2011.csv')])
-    bs_data = pd.concat([pd.read_csv('simfin_bs_Q1_2011.csv'), pd.read_csv('simfin_bs_Q2_2011.csv')])
-    shares_data = pd.read_csv('simfin_shares.csv')
+    # Read data into memory - Add SQL pulls
+    if driver.pull_from_sql:
+        print("Not hooked up")
+        quit()
+    else:
+        cf_data = pd.read_csv('qtrly_simfin_cf.csv')
+        pl_data = pd.read_csv('qtrly_simfin_pl.csv')
+        bs_data = pd.read_csv('qtrly_simfin_bs.csv')
+        shares_data = pd.read_csv('simfin_shares.csv')
     
     # Instantiate a quarter, month-day map
     mth_day_map = pd.DataFrame([['Q1', '-03-31'],
@@ -124,7 +131,7 @@ def main():
     tic_qtr_map = pd.merge(tic_qtr_map, qtr_yr_map, how='inner', on='date')
 
     # Merge all data sets together
-    dfs_to_reduce = [tic_qtr_map] + statements_clean
+    dfs_to_reduce = [tic_qtr_map] + statements_clean + [shares_clean]
     qtrly_simfin = reduce(lambda left, right: pd.merge(left, right, how='left', on=key_cols), dfs_to_reduce)
     
     # Remove rows where all fields are missing
@@ -161,6 +168,7 @@ def main():
                                           
     # Export
     daily_simfin.to_csv('daily_simfin.csv', index=False)
+    ## daily_simfin.to_sql('daily_simfin', con=engine, if_exists='replace')
     
 if __name__ == '__main__':
     main()    
