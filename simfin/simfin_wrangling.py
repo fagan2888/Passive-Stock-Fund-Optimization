@@ -138,6 +138,13 @@ def main():
     qtrly_simfin['n_pop'] = qtrly_simfin.apply(lambda x: x.count(), axis=1)
     qtrly_simfin = qtrly_simfin[qtrly_simfin['n_pop'] > len(key_cols)].reset_index().drop(['index','n_pop'], axis=1)
     
+    # Remove columns which are missing for more than a specified threshold
+    n_obs = qtrly_simfin.shape[0]
+    pct_msgs = qtrly_simfin.isnull().sum() / n_obs
+    cols_to_keep = pct_msgs[pct_msgs < 0.15].index.tolist()
+    
+    qtrly_simfin = qtrly_simfin[cols_to_keep]
+    
     # Generate a daily frequency dataframe
     daily_dates = pd.date_range(start=qtr_yr_map['date'].min(), 
                                 end=qtr_yr_map['date'].max())
