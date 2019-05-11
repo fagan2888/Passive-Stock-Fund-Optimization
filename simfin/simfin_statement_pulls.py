@@ -150,6 +150,8 @@ def main(key, statement_types, years, quarters):
                                     
     if driver.use_process_file:
         process_file.to_csv('process_file.csv', index=False)
+    else:
+        print("This was run without the process file.\nBe sure to append what you've processed for later ingestion!")
 
 if __name__ == '__main__':
     main(driver.key, driver.statement_types, driver.years, driver.quarters)
