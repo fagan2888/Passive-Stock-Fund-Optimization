@@ -17,24 +17,23 @@ import pandas as pd
 from talib import RSI
 import numpy as np
 import matplotlib.pyplot as plt
-import time
 import math
 
 
 START_DATE = '2011-01-03'
 END_DATE = '2019-04-03'
-ROLLING_WINDOW = 30
 RANK_RECALCULATE = 1
 YEARLY_TRADING_DAYS = 252
 MONTHLY_TRADING_DAYS = 21
 
 
 def get_stock_rsi_daily(time_series_df, ticker):
-    # compute RSI vector using ta-lib
+    """
+    compute rolling RSI of stock prices using talib
+    """
     close = get_time_series_adjusted_close(time_series_df, ticker)
     rsi = RSI(close, timeperiod=20)
     rsi_series = pd.Series(rsi)
-    # add to db data structure
     tmpDf = pd.DataFrame(data=rsi_series, columns=['RSI'])
     time_series_df.loc[ticker, 'RSI'] = tmpDf['RSI'].values
     return time_series_df
@@ -45,6 +44,11 @@ def get_stock_percent_off_52_week_high():
 
 
 def update_rank_dataframe(df, stock_returns, period, date):
+    """
+    For each stock trading day in the data range, update the
+    rolling return rank based on the new monthly & yearly
+    percent change value
+    """
     stock_period = str(period) + "_Return"
     rank_period = str(period) + "_Return_Rank"
     df_tmp = df.reset_index(level=0)
@@ -62,6 +66,10 @@ def update_rank_dataframe(df, stock_returns, period, date):
 
 
 def update_with_null_return_rankings(df, stocks_dict, period, date):
+    """
+    Since the early dates do not have enough data to compute monthly/yearly
+    percent chages, copy the data frame values
+    """
     stock_period = str(period) + "_Return"
     rank_period = str(period) + "_Return_Rank"
     df_tmp = df.reset_index(level=0)
@@ -77,6 +85,10 @@ def update_with_null_return_rankings(df, stocks_dict, period, date):
 
 
 def get_daily_adjusted_stock_return_rankings(df, ticker_list, date_list):
+    """
+    The input df dataframe must contain monthly & yearly stock percent changes
+    to compute a rolling return rank updated daily
+    """
     global yearl_rank_df, monthly_rank_df
     yearly_rank_df = pd.DataFrame()
     monthly_rank_df = pd.DataFrame()
@@ -121,114 +133,8 @@ def get_daily_adjusted_stock_return_rankings(df, ticker_list, date_list):
     return yearly_rank_df, monthly_rank_df
 
 
-def get_stock_volatility(time_series_df, ticker):
-    close = get_time_series_adjusted_close(time_series_df, ticker)
-    # compute Volatility with intermediate-term rolling window
-    close_series = pd.Series(close)
-    roller = close_series.rolling(ROLLING_WINDOW)
-    vol_vec = roller.std(ddof=0)
-    tmp_vol_df = pd.DataFrame(data=vol_vec, columns=['Volatility'])
-    time_series_df.loc[ticker, 'Volatility'] = (tmp_vol_df['Volatility'].values / close) * 12
-    return time_series_df
-
-
-def get_stock_sharp_ratio():
-    pass
-
-
 def get_time_series_adjusted_close(time_series_df, ticker):
+    """
+    Obtain the adjusted closing values in the date range for a ticker
+    """
     return time_series_df.loc[ticker].loc[::, 'AdjClose'].values
-
-
-def get_dataframe_from_csv(file):
-    try:
-        df = pd.read_csv(file)
-    except FileNotFoundError as err:
-        print("FileNotFoundError with path " + file + "\nError: " + err)
-        raise
-    return df
-
-
-def add_columns_to_df(basic_df, columns):
-    # Set Multi Index on the dataframe to get the 3d data structure
-    try:
-        new_df = basic_df.set_index(['Symbol', 'Date'])
-    except Exception as err:
-        print("index set error")
-        print(err)
-        raise
-
-    # Add columns to the new df
-    for col in columns:
-        new_df[col] = -1
-
-    return new_df
-
-
-def main():
-
-    print('Generating Momentum Features\n-------------------------------------------------------------')
-    file_path = "stock_prices_and_returns.csv"
-    output_file_path = "momentum-features.csv"
-    test_output_file = "test-momentum.csv"
-    new_columns = ['RSI', 'Volatility']
-    ticker_list = []
-    date_list = []
-
-    basic_df = get_dataframe_from_csv(file_path)
-    df = add_columns_to_df(basic_df, new_columns)
-
-    # Get Index Lists
-    for symbol, mrow in df.groupby(level=0):
-        ticker_list.append(symbol)
-
-    for date, mrow in df.groupby(level=1):
-        date_list.append(date)
-
-    print('Updating Dataframe with RSI, Volatility, and Performance Rank columns......')
-    start = time.time()
-    for symbol in ticker_list:
-        df = get_stock_rsi_daily(df, symbol)
-        df = get_stock_volatility(df, symbol)
-
-    # Get Daily adjusted return rankings based on trailing monthly and yearly prices
-    df_yearly, df_monthly = get_daily_adjusted_stock_return_rankings(df, ticker_list, date_list)
-
-    # Reset multi-index to single index on Symbol
-    df_yearly.reset_index(level=1, inplace=True)
-    df_monthly.reset_index(level=1, inplace=True)
-
-    # Drop duplicate columns to isolate monthly rankings
-    try:
-        df_monthly.drop(columns=['Open','High', 'Low', 'Close', 'Volume', 'AdjClose', 'Pct_Change_Daily', 'Pct_Change_Monthly',
-                                 'Pct_Change_Yearly', 'RSI', 'Volatility'], inplace=True)
-    except Exception as err:
-        pass
-
-    # Declare Final Dataframe to be stored
-    final_df = pd.DataFrame()
-
-    # Loop symbol rows in dataframe and merge to add the monthly return rankings to the yearly
-    for symbol in ticker_list:
-        tmp = pd.merge(df_yearly.loc[symbol], df_monthly.loc[symbol], on='Date', how='inner')
-        df_yearly.loc[symbol, :] = tmp
-        tmp['Symbol'] = symbol
-        final_df = final_df.append(tmp)
-
-    # Adjusted index before converted or stored
-    try:
-        final_df.reset_index(level=0, inplace=True)
-        final_df.set_index(['Symbol', 'Date'], inplace=True)
-        final_df.drop(columns=['Yearly_Return', 'Monthly_Return', 'index'], inplace=True)
-
-    except Exception as err:
-        print(err)
-
-    print("Writing to file: " + output_file_path)
-    final_df.to_csv(output_file_path, encoding='utf-8', index=True)
-    end = time.time()
-    print("Process time: " + str(end - start) + " seconds.")
-
-
-if __name__ == '__main__':
-    main()
