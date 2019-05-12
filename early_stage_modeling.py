@@ -52,7 +52,7 @@ features = ['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose', 'Year',
             'Month', 'Week', 'Day', 'Dayofweek', 'Dayofyear']
 
 X = train[features]
-X[['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose']] =        \
+X[['High_diff', 'Low_diff', 'Open_diff', 'Close', 'Volume', 'AdjClose']] =        \
 X[['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose']]  -       \
 X[['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose']].shift(1)
 X = X.apply(lambda x: (x - np.mean(x))/np.std(x)).fillna(0) # Impute 0 for now
@@ -72,6 +72,10 @@ from sklearn.metrics import confusion_matrix, classification_report
 # MODEL
 from sklearn.neighbors import KNeighborsClassifier
 knn = KNeighborsClassifier()
+
+tscv = TimeSeriesSplit(n_splits=12).split(X)
+gsearch = GridSearchCV(estimator=model, cv=tscv,
+                       param_grid=param_search)
 
 knn.fit(X_train, y_train)
 y_pred = knn.predict(X_test)
