@@ -12,7 +12,31 @@ import pandas as pd
 from talib import RSI
 import matplotlib.pyplot as plt
 import time
-import momentum
+
+
+def get_dataframe_from_csv(file):
+    try:
+        df = pd.read_csv(file)
+    except FileNotFoundError as err:
+        print("FileNotFoundError with path " + file + "\nError: " + err)
+        raise
+    return df
+
+
+def add_columns_to_df(basic_df, columns):
+    # Set Multi Index on the dataframe to get the 3d data structure
+    try:
+        new_df = basic_df.set_index(['Symbol', 'Date'])
+    except Exception as err:
+        print("index set error")
+        print(err)
+        raise
+
+    # Add columns to the new df
+    for col in columns:
+        new_df[col] = -1
+
+    return new_df
 
 
 def get_daily_percent_change(time_series_df, ticker):
@@ -24,11 +48,11 @@ def get_daily_percent_change(time_series_df, ticker):
 
 
 def get_stock_return_features():
-    file_path = "stock_price_until_2019_04_03.csv"
-    output_file_path = "stock_prices_and_returns.csv"
+    file_path = "data/stock_price_until_2019_04_03.csv"
+    output_file_path = "data/stock_prices_and_returns.csv"
     new_columns = ['Pct_Change_Daily', 'Pct_Change_Monthly', 'Pct_Change_Yearly']
-    basic_df = momentum.get_dataframe_from_csv(file_path)
-    df = momentum.add_columns_to_df(basic_df, new_columns)
+    basic_df = get_dataframe_from_csv(file_path)
+    df = add_columns_to_df(basic_df, new_columns)
 
     start = time.time()
     print("Calculating price return data....................")
@@ -43,3 +67,4 @@ def get_stock_return_features():
     print("Process time: " + str(end - start) + " seconds.")
 
 get_stock_return_features()
+
