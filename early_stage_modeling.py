@@ -110,7 +110,7 @@ features = np.array(X)
 labels = y.copy()
 
 EMA = 0
-gamma = 0.05
+gamma = 0.5
 for ti in range(len(labels)):
     EMA = gamma*labels[ti] + (1-gamma)*EMA
     labels[ti] = EMA   
