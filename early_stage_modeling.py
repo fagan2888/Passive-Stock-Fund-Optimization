@@ -74,6 +74,7 @@ for i in range(0,22):
 
 # Average of those returns
 target = np.array(pd.DataFrame(aheads).mean(axis=0, skipna=False).tolist())
+target_raw = np.array(100*((train['AdjClose'].shift(-1) - train['AdjClose'])/train['AdjClose']))
 
 # CHOOSE FEATURES -------------------------------------------------------------
 features = ['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose', 'Year',
@@ -93,7 +94,7 @@ X = X.apply(lambda x: (x - np.mean(x))/np.std(x)).fillna(0)
 # PARTITIONING ----------------------------------------------------------------
 
 # Hold out mechanically-missing data
-test_idx = np.where(np.isnan(target))[0].tolist()
+test_idx = np.where(np.isnan(target_raw))[0].tolist()
 
 y = np.delete(target, test_idx)
 X_holdout = X.loc[X.index[test_idx]]
@@ -110,12 +111,12 @@ features = np.array(X)
 labels = y.copy()
 
 EMA = 0
-gamma = 0.5
+gamma = 0.25
 for ti in range(len(labels)):
     EMA = gamma*labels[ti] + (1-gamma)*EMA
     labels[ti] = EMA   
 
-pd.DataFrame(labels).plot()
+pd.DataFrame(list(zip(y.copy(), labels))).plot()
 
 # Generate splits
 splits = TimeSeriesSplit(n_splits=12)
