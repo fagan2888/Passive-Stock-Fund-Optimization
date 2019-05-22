@@ -15,20 +15,9 @@ George Krug
 
 import pandas as pd
 import time
-from taIndicators import momentum, volatility as vol
+from taIndicators import momentum, basic, volatility as vol
+import dataframeHandling as dfhandle
 import sys
-
-
-def get_dataframe_from_csv(file):
-    """
-    Open file; raise exception if it does not exist
-    """
-    try:
-        df = pd.read_csv(file)
-    except FileNotFoundError as err:
-        print("FileNotFoundError with path " + file + "\nError: " + err)
-        raise
-    return df
 
 
 def clean_and_merge_monthly_and_yearly_dfs(df_yearly, df_monthly):
@@ -77,22 +66,6 @@ def get_index_lists(df, ticker_list, date_list):
     return ticker_list, date_list
 
 
-def add_columns_to_df(basic_df, columns):
-    # Set Multi Index on the dataframe to get the 3d data structure
-    try:
-        new_df = basic_df.set_index(['Symbol', 'Date'])
-    except Exception as err:
-        print("index set error")
-        print(err)
-        raise
-
-    # Add columns to the new df
-    for col in columns:
-        new_df[col] = -1
-
-    return new_df
-
-
 def handle_input_arguments():
     """
     Handle input arguments and allow for custom test files
@@ -135,8 +108,8 @@ if __name__== '__main__':
     print("output file: " + output_file_path)
 
     # convert csv to dataframe, index ticker & date, and add new featur columns
-    basic_df = get_dataframe_from_csv(file_path)
-    df = add_columns_to_df(basic_df, new_columns)
+    basic_df = dfhandle.get_dataframe_from_csv(file_path)
+    df = dfhandle.add_columns_to_df(basic_df, new_columns)
 
     # get index lists of 3d df to optimize looping
     ticker_list, date_list = get_index_lists(df, ticker_list, date_list)
