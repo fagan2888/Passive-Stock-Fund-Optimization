@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+import pickle
 
 # SET-UP ----------------------------------------------------------------------
 
@@ -231,11 +232,7 @@ for h in horizons:
     target_dict[up_key] = target_up
     target_dict[rel_return_key] = target_rel_return
     target_dict[rel_up_key] = target_rel_up
-    
-# Some diagnostics regarding class imbalance
-for key, values in target_dict.items():
-    print("% of {} in positive class: {}%".format(key, 100*round(np.nanmean(values),3)))
-    
+
 # Add features to dictionary prior to export
 target_dict['features'] = train
 target_dict['ticker_features'] = ticker_features
