@@ -67,6 +67,17 @@ train = train.loc[train['ticker'] == 'A',:]
 
 # SET UP TARGET ---------------------------------------------------------------
 
+# Specify ranges
+n = 1 # n-day ahead return
+q = 21 # q-day window
+
+# At the ticker level, lead the AdjClose column by n-trading days
+target_gen = train[['ticker', 'date_of_transaction', 'AdjClose']]
+AdjClose_ahead = target_gen.groupby('ticker')['AdjClose'].shift(-n)
+AdjClose_ahead.name = 'AdjClose_ahead'
+
+target_raw = np.array(100*((AdjClose_ahead - train['AdjClose'])/train['AdjClose']))
+
 # Computing all of the returns for the next 21 days (month) relative to today
 aheads = []
 for i in range(0,22):
@@ -184,4 +195,97 @@ print("\n")
 print(np.mean(valid_scores))
 print("\n")
 print(sorted(list(zip(feature_names, feature_importance_values)), key=lambda x: x[1], reverse=True))
-     
+
+# PanelSplits -----------------------------------------------------------------
+
+# Create copies for panel-level regressions
+X_p = X.copy(deep=True)
+y_p = target_raw.copy()
+
+# Indexes of hold-out test data (the 21 days of data preceding the present day)
+test_idx = np.where(np.isnan(y_p))[0].tolist()
+
+# In order to ensure grouping is done properly, remove this data from a ticker-identification set as well
+tickers = train['ticker'].unique().tolist()
+ticker_locs = train['ticker'].drop(train.index[test_idx]).reset_index().drop('index', axis=1)
+
+def PanelSplit(n_folds, groups, window=False):
+    
+    # Generate a list of the indexes of the indexes for each entity in the data
+    idx_list = [ticker_locs.loc[ticker_locs['ticker'] == t].index.tolist() for t in tickers]
+    
+    # Storage for indexes 
+    train_splits = [[] for _ in range(n_folds)]
+    valid_splits = [[] for _ in range(n_folds)]
+    
+    for idx in idx_list:
+        splits = TimeSeriesSplit(n_splits=n_folds)
+        fold = 0
+        for train_indices, valid_indices in splits.split(idx):
+            train_splits[fold] = train_splits[fold] + np.array(idx)[train_indices].tolist()
+            valid_splits[fold] = valid_splits[fold] + np.array(idx)[valid_indices].tolist()
+            fold += 1
+            
+    panel_splits = list(zip(train_splits, valid_splits))
+    
+    return(panel_splits)
+    
+def PanelSplit(n_folds, groups):    
+    
+    by_ticker_index = (groups.groupby('ticker')
+                       .apply(lambda x: x.reset_index(drop=True))
+                       .drop('ticker', axis=1)
+                       .reset_index()
+                       .rename({'level_1':'tsidx'}, axis=1)
+                       )
+    
+    ticker_range = by_ticker_index['tsidx'].unique().tolist()
+    ticker_range = sorted(ticker_range)
+    
+    splits = TimeSeriesSplit(n_splits=n_folds)
+    
+    for train_indices, valid_indices in splits.split(ticker_range):
+        panel_train_indices = by_ticker_index[by_ticker_index['tsidx'].isin(train_indices)].index.tolist()
+        panel_valid_indices = by_ticker_index[by_ticker_index['tsidx'].isin(valid_indices)].index.tolist()
+        yield panel_train_indices, panel_valid_indices
+        
+def WindowSplit(window, groups, panel):    
+    
+    wparams = window.split(':')
+    wtrain = int(wparams[0])
+    wvalid = int(wparams[1])
+    witer = int(wparams[2])
+    
+    by_ticker_index = (groups.groupby('ticker')
+                       .apply(lambda x: x.reset_index(drop=True))
+                       .drop('ticker', axis=1)
+                       .reset_index()
+                       .rename({'level_1':'tsidx'}, axis=1)
+                       )
+    
+    ticker_range = by_ticker_index['tsidx'].unique().tolist()
+    ticker_range = sorted(ticker_range)
+    
+    stop = 0
+    start = (max(ticker_range) % witer) + 1
+    if panel:
+        while stop < max(ticker_range):
+            train_indices = np.arange(start, start + wtrain).tolist()
+            valid_indices = np.arange(start + wtrain, start + wtrain + wvalid).tolist()
+            stop = max(valid_indices)
+            start += witer
+            yield train_indices, valid_indices
+    else:
+        while stop < max(ticker_range):
+            train_indices = np.arange(start, start + wtrain).tolist()
+            valid_indices = np.arange(start + wtrain, start + wtrain + wvalid).tolist()
+            stop = max(valid_indices)
+            start += witer
+            panel_train_indices = by_ticker_index[by_ticker_index['tsidx'].isin(train_indices)].index.tolist()
+            panel_valid_indices = by_ticker_index[by_ticker_index['tsidx'].isin(valid_indices)].index.tolist()
+            yield panel_train_indices, panel_valid_indices      
+
+panel_splitter = PanelSplit(6, ticker_locs)
+for x, y in panel_splitter:
+    print(x[:100])
+    print(y[:50])
