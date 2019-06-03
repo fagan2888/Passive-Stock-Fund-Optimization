@@ -380,7 +380,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
         else:
             bst = LGBMClassifier(n_estimators=10000, objective = 'binary', 
                                  class_weight = 'balanced', learning_rate = 0.01,
-                                 max_bin = 25, num_leaves = 25, max_depth = 1,
+                                 ##max_bin = 25, num_leaves = 25, max_depth = 1,
                                  reg_alpha = 0.1, reg_lambda = 0.1, 
                                  subsample = 0.8, random_state = 101
                                 )

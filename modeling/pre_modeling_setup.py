@@ -171,7 +171,7 @@ for h in horizons:
     AdjClose_ahead = target_gen.groupby('ticker')['AdjClose'].shift(-n)
     AdjClose_ahead.name = 'AdjClose_ahead'
     
-    snp_ahead = target_gen.groupby('ticker')['snp500'].shift(-n)
+    snp_ahead = target_gen.groupby('ticker')['snp500_close'].shift(-n)
     snp_ahead.name = 'snp_ahead'
     
     # Raw returns
@@ -205,7 +205,7 @@ for h in horizons:
     target_up = target_up.tolist()
     
     # Returns, relative to the S&P 500
-    snp_return = np.array(100*((AdjClose_ahead - train['AdjClose'])/train['AdjClose']))
+    snp_return = np.array(100*((snp_ahead - target_gen['snp500_close'])/train['snp500_close']))
     target_rel_return = target_return - snp_return
     
     # 'Up' target, relative to today
