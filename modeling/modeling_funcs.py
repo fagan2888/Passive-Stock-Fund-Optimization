@@ -61,15 +61,18 @@ def prepare_model_structures(X, y, holdout, labeled=False, ema_gamma=1):
     # Empty array for feature importances
     feature_importance_values = np.zeros(len(feature_names))
 
-    # Empty array for out of fold validation predictions
+    # Empty array for out of fold validation predictions, and thresholds
     out_of_fold = np.zeros(features.shape[0])
+    thresholds = np.zeros(features.shape[0])
+    predicted_out_of_fold = np.zeros(features.shape[0])
     
     # Empty array for test predictions
     test_predictions = np.zeros(test_features.shape[0])
         
     return (features, feature_names, feature_importance_values, \
             test_features, test_predictions, out_of_fold, \
-            targets_smoothed, orig_targets)
+            targets_smoothed, orig_targets, thresholds, \
+            predicted_out_of_fold)
     
 def benchmark_target(target, groups, grouping_var = 'ticker'):
     """
@@ -211,7 +214,8 @@ def discrimination_threshold_search(predicted, expected, search_range=[0.25, 0.7
     return(optimum)
     
 def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, label, param_search={}, export=False,
-                           cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, **kwargs):
+                           cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, 
+                           smooth_train_targets=False, ema_gamma_train=1, **kwargs):
     """
     Flexible function for fitting any number of sci-kit learn
     classifiers, with optional grid search.
@@ -221,7 +225,8 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     
     # Prepare modeling structures - unpack
     features, feature_names, feature_importance_values, test_features, \
-    test_predictions, out_of_fold, targets_smoothed, orig_targets = \
+    test_predictions, out_of_fold, targets_smoothed, orig_targets, \
+    thresholds, predicted_out_of_fold, = \
     prepare_model_structures(X, y, holdout, labeled, ema_gamma)
     
     # Compute some baselines
@@ -251,6 +256,13 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
         train_features, train_targets = features[train_indices], targets_smoothed[train_indices]
         test_features, expected = features[test_indices], targets_smoothed[test_indices]
         
+        if smooth_train_targets:
+            EMA = 0
+            gamma_ = ema_gamma_train
+            for ti in range(len(train_targets)):
+                EMA = gamma_*train_targets[ti] + (1-gamma_)*EMA
+                train_targets[ti] = EMA 
+        
         # Generate a model given the optimal parameters established in grid search
         if param_search:
             estimator = model(**gsearch_model.best_params_)
@@ -260,14 +272,18 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
         # Train the estimator; fit 
         estimator.fit(train_features, train_targets)
         probs = [p[1] for p in estimator.predict_proba(test_features)]
+        out_of_fold[test_indices] = probs
 
         # Dynamic classification threshold selection
         if threshold_search:
             opt_threshold = discrimination_threshold_search(probs, expected)
+            thresholds[test_indices] = opt_threshold
         else:
             opt_threshold = 0.5
+            thresholds[test_indices] = opt_threshold
             
         predicted = [1 if y >= opt_threshold else 0 for y in probs]
+        predicted_out_of_fold[test_indices] = predicted
 
         # Append scores to the tracker
         scores['precision'].append(metrics.precision_score(expected, predicted, average="weighted"))
@@ -295,21 +311,24 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     estimator.fit(features, targets_smoothed)
     probs = [p[1] for p in estimator.predict_proba(test_features)]
     
+    # Dynamic classification threshold selection
     if threshold_search:
         opt_threshold = discrimination_threshold_search(probs, expected)
     else:
         opt_threshold = 0.5
         
     predicted = [1 if y >= opt_threshold else 0 for y in probs]
+    
+    # Create a dataframe for model evaluation
+    cols = ["expected", "predicted_prob", "threshold", "predicted"]
+    vals = [targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
+    preds = pd.DataFrame().from_dict(zip(cols,vals))    
 
     # Store values for later reporting/use in app
-    evals = {'precision':np.mean(scores['precision']), 
-             'recall':np.mean(scores['recall']), 
-             'accuracy':np.mean(scores['accuracy']), 
-             'f1':np.mean(scores['f1']),
-             'probabilities':probs,
-             'predictions':predicted,
-             'importances':sorted_importances
+    results = {'preds_df':preds,
+               'probabilities':probs,
+               'predictions':predicted,
+               'importances':sorted_importances
              }
     
     # Report
@@ -321,14 +340,11 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     print("Validation scores are as follows:")
     print(pd.DataFrame(scores).mean())
     
-    # Output the evals dictionary
-    if export:
-        outpath = "{}_{}.pickle".format(label.tolower().replace(" ", "_"), ticker.tolower())
-        with open(outpath, 'wb') as f:
-            pickle.dump(evals, f)
-            
+    return results
+    
 def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, label="LGBM Classifier", param_search={}, 
-                        export=False, cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, **kwargs):
+                        cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, 
+                        ema_gamma_train=1, smooth_train_targets=False, **kwargs):
     """
     Flexible function for fitting LightGBM
     classifiers, with optional grid search.
@@ -338,23 +354,19 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
     
     # Prepare modeling structures - unpack
     features, feature_names, feature_importance_values, test_features, \
-    test_predictions, out_of_fold, targets_smoothed, orig_targets = \
+    test_predictions, out_of_fold, targets_smoothed, orig_targets, \
+    thresholds, predicted_out_of_fold, = \
     prepare_model_structures(X, y, holdout, labeled, ema_gamma)
     
     # Compute some baselines
-    benchmark_target(targets_smoothed, groups)
+    ## benchmark_target(targets_smoothed, groups)
 
     # Instantiate cross-validation splitting generators
     splits, search_splits = instantiate_splits(X, n_splits, groups, cv_method)
-    
-    # Dictionary of lists for recording validation and training scores
-    scores = {'precision':[], 'recall':[], 'accuracy':[], 'f1':[]}
-    
+
     # Lists for recording validation and training scores
     test_scores = []
     train_scores = []
-    test_accs = []
-    train_accs = [] 
     
     # Perform a grid-search on the provided parameters to determine best options
     if param_search:
@@ -368,27 +380,34 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
 
     split_counter = 1
     for train_indices, test_indices in splits: 
-        print("Training model on validation split #{}".format(split_counter))
+        ## print("Training model on validation split #{}".format(split_counter))
               
         # Train/test split
         train_features, train_targets = features[train_indices], targets_smoothed[train_indices]
         valid_features, expected = features[test_indices], targets_smoothed[test_indices]
-
+        
+        if smooth_train_targets:
+            EMA = 0
+            gamma_ = ema_gamma_train
+            for ti in range(len(train_targets)):
+                EMA = gamma_*train_targets[ti] + (1-gamma_)*EMA
+                train_targets[ti] = EMA  
+            
         # Generate a bst model given the optimal parameters established in grid search
         if param_search:
             bst = LGBMClassifier(**gsearch_model.best_params_)
         else:
             bst = LGBMClassifier(n_estimators=10000, objective = 'binary', 
                                  class_weight = 'balanced', learning_rate = 0.01,
-                                 ##max_bin = 25, num_leaves = 25, max_depth = 1,
+                                 max_bin = 25, num_leaves = 25, max_depth = 1,
                                  reg_alpha = 0.1, reg_lambda = 0.1, 
                                  subsample = 0.8, random_state = 101
                                 )
 
         # Train the bst
-        bst.fit(train_features, train_targets, eval_metric = ['auc', 'binary_error'],
+        bst.fit(train_features, train_targets, eval_metric = ['auc'],
                 eval_set = [(valid_features, expected), (train_features, train_targets)],
-                eval_names = ['test', 'train'], early_stopping_rounds = 100, verbose = 0)
+                eval_names = ['test', 'train'], early_stopping_rounds = 100, verbose = 200)
 
         # Record the best iteration
         best_iteration = bst.best_iteration_
@@ -397,47 +416,54 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
         feature_importance_values += bst.feature_importances_ / n_splits
         
         # Make predictions
-        #test_predictions += bst.predict_proba(test_features, num_iteration = best_iteration)[:, 1] / n_splits
+        test_predictions += bst.predict_proba(test_features, num_iteration = best_iteration)[:, 1] / n_splits
 
         # Record the out of fold predictions
         out_of_fold[test_indices] = bst.predict_proba(valid_features, num_iteration = best_iteration)[:, 1]
 
+        probs = bst.predict_proba(valid_features, num_iteration = best_iteration)[:, 1]
+
+        # Dynamic classification threshold selection
+        if threshold_search:
+            opt_threshold = discrimination_threshold_search(probs, expected)
+            thresholds[test_indices] = opt_threshold
+        else:
+            opt_threshold = 0.5
+            thresholds[test_indices] = opt_threshold
+            
+        predicted = np.array([1 if y >= opt_threshold else 0 for y in probs])
+        predicted_out_of_fold[test_indices] = predicted
+
         # Record the best score
         test_score = bst.best_score_['test']['auc']
         train_score = bst.best_score_['train']['auc']
-        test_acc = bst.best_score_['test']['binary_error']
-        train_acc = bst.best_score_['train']['binary_error']
         
         test_scores.append(test_score)
         train_scores.append(train_score)
-        test_accs.append(test_acc)
-        train_accs.append(train_acc)
-        
+
         split_counter += 1 
         
     # Properly format feature importances
     named_importances = list(zip(feature_names, feature_importance_values))
     sorted_importances = sorted(named_importances, key=lambda x: x[1], reverse=True)
+    
+    # Create a dataframe for model evaluation
+    cols = ["expected", "predicted_prob", "threshold", "predicted"]
+    vals = [targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
+    preds = pd.DataFrame().from_dict(zip(cols,vals))
         
     # Set up an exportable dictionary with results from the model
     results = {
         'train_auc':train_scores,
-        'train_acc':train_acc,
         'validation_auc':test_scores,
-        'validation_accuracy':test_acc,
-        'test_preds':out_of_fold,
+        'preds_df':preds,
         'feature_importances':sorted_importances,
         'test_predictions': None #test_predictions
     }
     
-    # Output the results dictionary
-    if export:
-        outpath = "lgbc_{}.pickle".format(ticker.tolower())
-        with open(outpath, 'wb') as f:
-            pickle.dump(results, f)
-    
     print("Build, hyperparameter selection, and validation of {} took {:0.3f} seconds\n".format(label, time.time()-start))
     print("Average AUC across {} splits: {}".format(n_splits, np.mean(test_scores)))
-    print("Average accuracy across {} splits: {}%".format(n_splits, 100*np.round((1-np.mean(test_acc)),2)))
     for i in range(6):
         print(sorted_importances[i])
+        
+    return results
