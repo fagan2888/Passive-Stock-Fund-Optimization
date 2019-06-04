@@ -67,6 +67,17 @@ tickers = df['ticker'].unique().tolist()
 
 # COMBINED DATA SET FEATURE ENGINEERING ---------------------------------------
 
+# Replace some missing values
+df['Pct_Change_Yearly'].fillna(value=df['Pct_Change_Monthly'], inplace=True)
+df['Yearly_Return_Rank'].fillna(value=df['Monthly_Return_Rank'], inplace=True)
+df['Momentum_Quality_Yearly'].fillna(value=df['Momentum_Quality_Monthly'], inplace=True)
+df['Volatility'].fillna(df['Volatility'].mean(), inplace=True)
+
+# Some normalization
+df['Monthly_Return_Rank'] = df['Monthly_Return_Rank'] / 500
+df['Yearly_Return_Rank'] = df['Yearly_Return_Rank'] / 500
+df['RSI'] = df['RSI'] / 100
+
 # Construct some aggregate financial ratios from the SimFin data
 df['eps'] = df['net_income_y'] / df['common_outstanding_basic']
 df['pe_ratio'] = df['AdjClose'] / df['eps']
@@ -129,6 +140,7 @@ to_smooth = ['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose', 'Pct_Change_D
 
 # Create smoothed variants of specified features
 for feature in to_smooth:
+    print("Smoothing '{}'".format(feature))
     x_to_smooth = np.array(df[feature].tolist())
     col = feature + "_smoothed"
     for t in tickers:
@@ -137,7 +149,7 @@ for feature in to_smooth:
 
         # Compute EMA smoothing of target within ticker
         EMA = 0
-        gamma_ = 0.5
+        gamma_ = 0.1
         for ti in range(len(x_t)):
             EMA = gamma_*x_t[ti] + (1-gamma_)*EMA
             x_t[ti] = EMA
@@ -156,8 +168,10 @@ train = df[df['date_of_transaction'] >= '2011-03-31'].reset_index(drop=True)
 
 # At the ticker level, lead the AdjClose column by n-trading days
 target_gen = train[['ticker', 'date_of_transaction', 'AdjClose', 
-                    'Monthly_Return_Rank', 'beta']]
+                    'Monthly_Return_Rank', 'SPY_Trailing_Month_Return', 
+                    'Pct_Change_Monthly', 'beta']]
 target_gen = pd.merge(target_gen, snp, on='date_of_transaction')
+target_gen = target_gen.sort_values(['ticker', 'date_of_transaction'])
 
 # Loop over specified horizons to generate a number of possible targets
 horizons = [1,5,10,21]
@@ -201,17 +215,24 @@ for h in horizons:
     
     # Simple 'up' target, relative to today
     target_up = np.where(np.isnan(AdjClose_ahead), np.nan,
-                np.where(AdjClose_ahead > train['AdjClose'], 1, 0))
+                np.where(AdjClose_ahead > target_gen['AdjClose'], 1, 0))
     target_up = target_up.tolist()
     
     # Returns, relative to the S&P 500
-    snp_return = np.array(100*((snp_ahead - target_gen['snp500_close'])/train['snp500_close']))
+    snp_return = np.array(100*((snp_ahead - target_gen['snp500_close'])/target_gen['snp500_close']))
     target_rel_return = target_return - snp_return
     
+    # S&P Month Return
+    target_snp_return = target_gen.groupby('ticker')['SPY_Trailing_Month_Return'].shift(-n)
+    
+    # Month Return
+    target_month_return = target_gen.groupby('ticker')['Pct_Change_Monthly'].shift(-n)
+    
     # 'Up' target, relative to today
-    target_rel_up = np.where(np.isnan(AdjClose_ahead) or np.isnan(snp_ahead), np.nan,
-                    np.where(AdjClose_ahead > snp_ahead, 1, 0))
+    target_rel_up = np.where(np.isnan(target_month_return), np.nan,
+                    np.where(target_month_return > target_snp_return, 1, 0))
     target_rel_up = target_rel_up.tolist()
+    
     
     # Generate keys based on horizon
     return_key = "target_{}_return".format(n)
