@@ -65,6 +65,7 @@ def prepare_model_structures(X, y, holdout, labeled=False, ema_gamma=1):
     out_of_fold = np.zeros(features.shape[0])
     thresholds = np.zeros(features.shape[0])
     predicted_out_of_fold = np.zeros(features.shape[0])
+    split_nums = np.zeros(features.shape[0])
     
     # Empty array for test predictions
     test_predictions = np.zeros(test_features.shape[0])
@@ -72,7 +73,7 @@ def prepare_model_structures(X, y, holdout, labeled=False, ema_gamma=1):
     return (features, feature_names, feature_importance_values, \
             test_features, test_predictions, out_of_fold, \
             targets_smoothed, orig_targets, thresholds, \
-            predicted_out_of_fold)
+            predicted_out_of_fold, split_nums)
     
 def benchmark_target(target, groups, grouping_var = 'ticker'):
     """
@@ -114,76 +115,84 @@ def benchmark_target(target, groups, grouping_var = 'ticker'):
     print(metrics.classification_report(target_rw, rw_class)) 
     print("="*79)     
     
-def PanelSplit(n_folds, groups, grouping_var='ticker'):
+def PanelSplit(n_folds, groups, grouping_var='date_of_transaction'):
     """
     Function to generate time series splits of a panel, provided
     a number of folds, and an indexable dataframe to create groups.
     Returns a generator object for compliance with sci-kit learn API.
     """
-    by_ticker_index = (groups.groupby(grouping_var)
-                       .apply(lambda x: x.reset_index(drop=True))
-                       .drop(grouping_var, axis=1)
-                       .reset_index()
-                       .rename({'level_1':'tsidx'}, axis=1)
-                       )
+    date_idx = (groups[[grouping_var]]
+                .drop_duplicates()
+                .sort_values(grouping_var)
+                .reset_index()
+                .rename({'index':'tsidx'}, axis=1))
     
-    ticker_range = by_ticker_index['tsidx'].unique().tolist()
-    ticker_range = sorted(ticker_range)
+    by_ticker_index = groups.reset_index().rename({'index':'panel_index'}, axis=1)
+    by_ticker_index = (pd.merge(by_ticker_index, date_idx, on=grouping_var)
+                       .sort_values('panel_index')
+                       .set_index('panel_index'))
+    
+    ticker_range = sorted(by_ticker_index['tsidx'].unique().tolist())
     
     splits = TimeSeriesSplit(n_splits=n_folds)
     
-    for train_indices, valid_indices in splits.split(ticker_range):
+    for train_indices, test_indices in splits.split(ticker_range):
         panel_train_indices = by_ticker_index[by_ticker_index['tsidx'].isin(train_indices)].index.tolist()
-        panel_valid_indices = by_ticker_index[by_ticker_index['tsidx'].isin(valid_indices)].index.tolist()
-        yield panel_train_indices, panel_valid_indices
+        panel_test_indices = by_ticker_index[by_ticker_index['tsidx'].isin(test_indices)].index.tolist()
+        yield panel_train_indices, panel_test_indices
         
-def WindowSplit(window, groups, panel):    
+def nDayAheadSplit(indexer, train=252, test=21, window=False, grouping_var='date_of_transaction'):
     """
-    Function to generate windowed time series splits of a panel, provided
-    a number of folds, and an indexable dataframe to create groups.
+    Function to generate time series splits of a panel or time series, provided
+    a dedicated minimum for the training sample and a dedicated testing window.
+    Default is to use a minimum of a year's worth of data with the month ahead
+    horizon for testing consistent with most constructed targets.
     Returns a generator object for compliance with sci-kit learn API.
     """    
-    wparams = window.split(':')
-    wtrain = int(wparams[0])
-    wvalid = int(wparams[1])
-    witer = int(wparams[2])
-    
-    by_ticker_index = (groups.groupby('ticker')
-                       .apply(lambda x: x.reset_index(drop=True))
-                       .drop('ticker', axis=1)
-                       .reset_index()
-                       .rename({'level_1':'tsidx'}, axis=1)
-                       )
-    
-    ticker_range = by_ticker_index['tsidx'].unique().tolist()
-    ticker_range = sorted(ticker_range)
-    
-    stop = 0
-    start = (max(ticker_range) % witer) + 1
-    if panel:
-        while stop < max(ticker_range):
-            train_indices = np.arange(start, start + wtrain).tolist()
-            valid_indices = np.arange(start + wtrain, start + wtrain + wvalid).tolist()
-            stop = max(valid_indices)
-            start += witer
-            yield train_indices, valid_indices
+    if type(indexer) == pd.DataFrame:
+        date_idx = (indexer[[grouping_var]]
+                .drop_duplicates()
+                .sort_values(grouping_var)
+                .reset_index()
+                .rename({'index':'tsidx'}, axis=1))
+        
+        by_ticker_index = indexer.reset_index().rename({'index':'panel_index'}, axis=1)
+        by_ticker_index = (pd.merge(by_ticker_index, date_idx, on=grouping_var)
+                           .sort_values('panel_index')
+                           .set_index('panel_index'))
+        
+        ticker_range = sorted(by_ticker_index['tsidx'].unique().tolist())
+        buffer = max(ticker_range) % test
+        
+        n = train + buffer
+        m = 0
+        while n < max(ticker_range):
+            train_indices = by_ticker_index[by_ticker_index['tsidx'].isin(np.arange(m, n))].index.tolist()
+            test_indices = by_ticker_index[by_ticker_index['tsidx'].isin(np.arange(n,(n+test)))].index.tolist()
+            n += test
+            if window:
+                m += test
+            
+            yield train_indices, test_indices
+            
     else:
-        while stop < max(ticker_range):
-            train_indices = np.arange(start, start + wtrain).tolist()
-            valid_indices = np.arange(start + wtrain, start + wtrain + wvalid).tolist()
-            panel_train_indices = by_ticker_index[by_ticker_index['tsidx'].isin(train_indices)].index.tolist()
-            panel_valid_indices = by_ticker_index[by_ticker_index['tsidx'].isin(valid_indices)].index.tolist()
-            stop = max(valid_indices)
-            start += witer
-            yield panel_train_indices, panel_valid_indices
+        buffer = indexer % test
+        n = train + buffer
+        m = 0
+        while n < indexer:
+            train_indices = np.arange(m, n).tolist()
+            test_indices = np.arange(n,(n+test)).tolist()
+            n += test
+            if window:
+                m += test
+            
+            yield train_indices, test_indices
             
 def instantiate_splits(X, n_splits, groups, cv_method='ts'):
     """
-    Create one of three cross-nation split
-    generator objects based on specified nation
-    method.
-    Returns two sets of splits for use in training
-    and GridSearchCV, if necessary
+    Create one of several cross-validation split generator objects based on 
+    specified validation method.
+    Returns two sets of splits for use in training and GridSearchCV.
     """
     
     if cv_method == "panel":
@@ -195,6 +204,18 @@ def instantiate_splits(X, n_splits, groups, cv_method='ts'):
     elif cv_method == "kfold":
         splits = KFold(n_splits=n_splits).split(X)
         search_splits = KFold(n_splits=n_splits).split(X)
+    elif cv_method == "tsrecur":
+        splits = nDayAheadSplit(X.shape[0], window=False)
+        search_splits = nDayAheadSplit(X.shape[0], window=False)
+    elif cv_method == "panelrecur":
+        splits = nDayAheadSplit(indexer=groups, window=False)
+        search_splits = nDayAheadSplit(indexer=groups, window=False)        
+    elif cv_method == "tswindow":
+        splits = nDayAheadSplit(X.shape[0], window=True)
+        search_splits = nDayAheadSplit(X.shape[0], window=True)
+    elif cv_method == "panelwindow":
+        splits = nDayAheadSplit(indexer=groups, window=True)
+        search_splits = nDayAheadSplit(indexer=groups, window=True)          
         
     return splits, search_splits
 
@@ -208,14 +229,14 @@ def discrimination_threshold_search(predicted, expected, search_range=[0.25, 0.7
     
     thresholds = list(np.arange(search_range[0], search_range[1], step))
     preds = [[1 if y >= t else 0 for y in predicted] for t in thresholds]
-    scores_by_threshold = [metrics(expected, p) for p in preds]
+    scores_by_threshold = [metric(expected, p) for p in preds]
     optimum = thresholds[scores_by_threshold.index(max(scores_by_threshold))]
     
     return(optimum)
     
 def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, label, param_search={}, export=False,
                            cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, 
-                           smooth_train_targets=False, ema_gamma_train=1, **kwargs):
+                           smooth_train_targets=False, ema_gamma_train=1, benchmarks=False, **kwargs):
     """
     Flexible function for fitting any number of sci-kit learn
     classifiers, with optional grid search.
@@ -226,11 +247,12 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     # Prepare modeling structures - unpack
     features, feature_names, feature_importance_values, test_features, \
     test_predictions, out_of_fold, targets_smoothed, orig_targets, \
-    thresholds, predicted_out_of_fold, = \
+    thresholds, predicted_out_of_fold, split_nums = \
     prepare_model_structures(X, y, holdout, labeled, ema_gamma)
     
     # Compute some baselines
-    benchmark_target(targets_smoothed, groups)
+    if benchmarks:
+        benchmark_target(targets_smoothed, groups)
 
     # Instantiate cross-validation splitting generators
     splits, search_splits = instantiate_splits(X, n_splits, groups, cv_method)
@@ -250,7 +272,7 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
 
     split_counter = 1
     for train_indices, test_indices in splits:
-        print("Training model on validation split #{}".format(split_counter))
+        ## print("Training model on validation split #{}".format(split_counter))
         
         # Train/test split
         train_features, train_targets = features[train_indices], targets_smoothed[train_indices]
@@ -269,10 +291,11 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
         else:
             estimator = model(**kwargs)
             
-        # Train the estimator; fit 
+        # Train the estimator; fit and store
         estimator.fit(train_features, train_targets)
         probs = [p[1] for p in estimator.predict_proba(test_features)]
         out_of_fold[test_indices] = probs
+        split_nums[test_indices] = split_counter
 
         # Dynamic classification threshold selection
         if threshold_search:
@@ -303,31 +326,33 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     sorted_importances = sorted(named_importances, key=lambda x: x[1], reverse=True)
     
     # Fit on full sample 
-    if param_search:
-        estimator = model(**gsearch_model.best_params_)
-    else:
-        estimator = model(**kwargs)
-        
-    estimator.fit(features, targets_smoothed)
-    probs = [p[1] for p in estimator.predict_proba(test_features)]
-    
-    # Dynamic classification threshold selection
-    if threshold_search:
-        opt_threshold = discrimination_threshold_search(probs, expected)
-    else:
-        opt_threshold = 0.5
-        
-    predicted = [1 if y >= opt_threshold else 0 for y in probs]
+#    if param_search:
+#        estimator = model(**gsearch_model.best_params_)
+#    else:
+#        estimator = model(**kwargs)
+#        
+#    estimator.fit(features, targets_smoothed)
+#    probs = [p[1] for p in estimator.predict_proba(test_features)]
+#    
+#    # Dynamic classification threshold selection
+#    if threshold_search:
+#        opt_threshold = discrimination_threshold_search(probs, expected)
+#    else:
+#        opt_threshold = 0.5
+#        
+#    predicted = [1 if y >= opt_threshold else 0 for y in probs]
     
     # Create a dataframe for model evaluation
-    cols = ["expected", "predicted_prob", "threshold", "predicted"]
-    vals = [targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
-    preds = pd.DataFrame().from_dict(zip(cols,vals))    
+    cols = ["split_number", "expected", "predicted_prob", "threshold", "predicted"]
+    vals = [split_nums, targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
+    preds = pd.DataFrame().from_items(zip(cols,vals))
+    preds['ticker'] = ticker
+    preds['model'] = label  
 
     # Store values for later reporting/use in app
     results = {'preds_df':preds,
                'probabilities':probs,
-               'predictions':predicted,
+#               'predictions':predicted,
                'importances':sorted_importances
              }
     
@@ -344,7 +369,7 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     
 def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, label="LGBM Classifier", param_search={}, 
                         cv_method="ts", labeled=False, groups=pd.DataFrame(), threshold_search=False, 
-                        ema_gamma_train=1, smooth_train_targets=False, **kwargs):
+                        ema_gamma_train=1, smooth_train_targets=False, benchmarks=False, **kwargs):
     """
     Flexible function for fitting LightGBM
     classifiers, with optional grid search.
@@ -355,11 +380,12 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
     # Prepare modeling structures - unpack
     features, feature_names, feature_importance_values, test_features, \
     test_predictions, out_of_fold, targets_smoothed, orig_targets, \
-    thresholds, predicted_out_of_fold, = \
+    thresholds, predicted_out_of_fold, split_nums = \
     prepare_model_structures(X, y, holdout, labeled, ema_gamma)
     
     # Compute some baselines
-    ## benchmark_target(targets_smoothed, groups)
+    if benchmarks:
+        benchmark_target(targets_smoothed, groups)
 
     # Instantiate cross-validation splitting generators
     splits, search_splits = instantiate_splits(X, n_splits, groups, cv_method)
@@ -397,9 +423,9 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
         if param_search:
             bst = LGBMClassifier(**gsearch_model.best_params_)
         else:
-            bst = LGBMClassifier(n_estimators=10000, objective = 'binary', 
+            bst = LGBMClassifier(n_estimators=1000, objective = 'binary', 
                                  class_weight = 'balanced', learning_rate = 0.01,
-                                 max_bin = 25, num_leaves = 25, max_depth = 1,
+                                 #max_bin = 25, num_leaves = 25, max_depth = 1,
                                  reg_alpha = 0.1, reg_lambda = 0.1, 
                                  subsample = 0.8, random_state = 101
                                 )
@@ -407,7 +433,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
         # Train the bst
         bst.fit(train_features, train_targets, eval_metric = ['auc'],
                 eval_set = [(valid_features, expected), (train_features, train_targets)],
-                eval_names = ['test', 'train'], early_stopping_rounds = 100, verbose = 200)
+                eval_names = ['test', 'train'], early_stopping_rounds = 100, verbose = 0)
 
         # Record the best iteration
         best_iteration = bst.best_iteration_
@@ -420,6 +446,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
 
         # Record the out of fold predictions
         out_of_fold[test_indices] = bst.predict_proba(valid_features, num_iteration = best_iteration)[:, 1]
+        split_nums[test_indices] = split_counter
 
         probs = bst.predict_proba(valid_features, num_iteration = best_iteration)[:, 1]
 
@@ -448,9 +475,11 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12, labe
     sorted_importances = sorted(named_importances, key=lambda x: x[1], reverse=True)
     
     # Create a dataframe for model evaluation
-    cols = ["expected", "predicted_prob", "threshold", "predicted"]
-    vals = [targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
-    preds = pd.DataFrame().from_dict(zip(cols,vals))
+    cols = ["split_number", "expected", "predicted_prob", "threshold", "predicted"]
+    vals = [split_nums, targets_smoothed, out_of_fold, thresholds, predicted_out_of_fold]
+    preds = pd.DataFrame().from_items(zip(cols,vals))
+    preds['ticker'] = ticker
+    preds['model'] = label
         
     # Set up an exportable dictionary with results from the model
     results = {
