@@ -7,6 +7,8 @@ Jared Berry
 """
 # Quality of life
 import time
+import re
+import pickle
 
 # Data structures
 import numpy as np
@@ -24,6 +26,16 @@ from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from lightgbm import LGBMClassifier
+
+def slugify(value):
+    """
+    Converts to ASCII. Converts spaces to underscores. Removes characters that
+    aren't alphanumerics, underscores, or hyphens. Converts to lowercase.
+    Also strips leading and trailing whitespace.
+    """
+    value = value.encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value).strip().lower()
+    return re.sub(r'[-\s]+', '_', value)
 
 def prepare_model_structures(X, y, holdout, labeled=False, ema_gamma=1):
     """
@@ -243,7 +255,8 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
                            param_search=None, cv_method="ts", labeled=False,
                            groups=pd.DataFrame(), threshold_search=False,
                            smooth_train_targets=False, ema_gamma_train=1,
-                           benchmarks=False, holdout_method="distributed", **kwargs):
+                           benchmarks=False, holdout_method="distributed",
+                           export=False, **kwargs):
     """
     Flexible function for fitting any number of sci-kit learn
     classifiers, with optional grid search.
@@ -378,13 +391,21 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
     print("Validation scores are as follows:")
     print(pd.DataFrame(scores).mean())
 
+    # Export
+    if export:
+        if not ticker:
+            ticker = 'panel'
+        outpath = "{}_{}_{}.pickle".format(slugify(label), ticker, cv_method)
+        with open(outpath, 'wb') as f:
+            pickle.dump(results, f)
+
     return results
 
 def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
                         label="LGBM Classifier", param_search=None, cv_method="ts",
                         labeled=False, groups=pd.DataFrame(), threshold_search=False,
                         ema_gamma_train=1, smooth_train_targets=False, benchmarks=False,
-                        holdout_method="distributed", **kwargs):
+                        holdout_method="distributed", export=False, **kwargs):
     """
     Flexible function for fitting LightGBM
     classifiers, with optional grid search.
@@ -506,7 +527,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
     preds = pd.DataFrame().from_items(zip(cols, vals))
     preds['ticker'] = ticker
     preds['model'] = label
-    
+
     # Set up an exportable dictionary with results from the model
     results = {
         'train_auc':train_scores,
@@ -520,5 +541,13 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
     print("Average AUC across {} splits: {}".format(n_splits, np.mean(test_scores)))
     for i in range(6):
         print(sorted_importances[i])
+
+    # Export
+    if export:
+        if not ticker:
+            ticker = 'panel'
+        outpath = "{}_{}_{}.pickle".format(slugify(label), ticker, cv_method)
+        with open(outpath, 'wb') as f:
+            pickle.dump(results, f)
 
     return results

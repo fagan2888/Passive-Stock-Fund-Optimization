@@ -237,7 +237,6 @@ for h in horizons:
                     np.where(target_month_return > target_snp_return, 1, 0))
     target_rel_up = target_rel_up.tolist()
 
-
     # Generate keys based on horizon
     return_key = "target_{}_return".format(n)
     return_res_key = "target_{}_return_res".format(n)
