@@ -17,7 +17,7 @@ import pickle
 
 # Connect to PostgresDB and pull in datasets
 engine = create_engine("postgresql://postgres:dfdk#418!@@34.74.173.183/postgres")
-                       
+
 # Yahoo! Finance
 yahoo=pd.read_sql_query('select * from stock_price', con=engine)
 print("Yahoo! Finance features:")
@@ -90,17 +90,17 @@ df['open_l1'] = df.groupby('ticker')['Open'].shift(1)
 df['open_l5'] = df.groupby('ticker')['Open'].shift(5)
 df['open_l10'] = df.groupby('ticker')['Open'].shift(10)
 
-df['return_prev1_open_raw'] = 100*(df['Open'] - df['open_l1'])/df['open_l1']
-df['return_prev5_open_raw'] = 100*(df['Open'] - df['open_l5'])/df['open_l5']
-df['return_prev10_open_raw'] = 100*(df['Open'] - df['open_l10'])/df['open_l10']
+df['return_prev1_open_raw'] = 100*(df['Open'] - df['open_l1']) / df['open_l1']
+df['return_prev5_open_raw'] = 100*(df['Open'] - df['open_l5']) / df['open_l5']
+df['return_prev10_open_raw'] = 100*(df['Open'] - df['open_l10']) / df['open_l10']
 
 df['close_l1'] = df.groupby('ticker')['AdjClose'].shift(1)
 df['close_l5'] = df.groupby('ticker')['AdjClose'].shift(5)
 df['close_l10'] = df.groupby('ticker')['AdjClose'].shift(10)
 
-df['return_prev1_close_raw'] = 100*(df['AdjClose'] - df['close_l1'])/df['close_l1']
-df['return_prev5_close_raw'] = 100*(df['AdjClose'] - df['close_l5'])/df['close_l5']
-df['return_prev10_close_raw'] = 100*(df['AdjClose'] - df['close_l10'])/df['close_l10']
+df['return_prev1_close_raw'] = 100*(df['AdjClose'] - df['close_l1']) / df['close_l1']
+df['return_prev5_close_raw'] = 100*(df['AdjClose'] - df['close_l5']) / df['close_l5']
+df['return_prev10_close_raw'] = 100*(df['AdjClose'] - df['close_l10']) / df['close_l10']
 
 # Compute market betas
 betas = np.empty(df.shape[0])
@@ -122,19 +122,19 @@ for t in tickers:
         i += 1
         
     betas[idx] = beta_vector
-    
+
 df['beta'] = betas
 
 # Features to smooth
 to_smooth = ['High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose', 'Pct_Change_Daily',
             'Pct_Change_Monthly', 'Pct_Change_Yearly', 'RSI', 'Volatility',
             'Yearly_Return_Rank', 'Monthly_Return_Rank', 'Pct_Change_Class',
-            'Rolling_Yearly_Mean_Positive_Days', 'Rolling_Monthly_Mean_Positive_Days', 
+            'Rolling_Yearly_Mean_Positive_Days', 'Rolling_Monthly_Mean_Positive_Days',
             'Rolling_Monthly_Mean_Price', 'Rolling_Yearly_Mean_Price',
             'open_l1', 'open_l5', 'open_l10', 'close_l1', 'close_l5', 'close_l10',
             'return_prev1_open_raw', 'return_prev5_open_raw', 'return_prev10_open_raw',
             'return_prev1_close_raw', 'return_prev5_close_raw', 'return_prev10_close_raw',
-            'pe_ratio', 'debt_ratio', 'debt_to_equity', 'roa', 'Momentum_Quality_Monthly', 
+            'pe_ratio', 'debt_ratio', 'debt_to_equity', 'roa', 'Momentum_Quality_Monthly',
             'Momentum_Quality_Yearly', 'SPY_Trailing_Month_Return'
             ]
 
@@ -148,15 +148,15 @@ for feature in to_smooth:
         x_t = np.array(x_to_smooth[idx].tolist())
 
         # Compute EMA smoothing of target within ticker
-        EMA = 0
+        ema = 0
         gamma_ = 0.1
-        for ti in range(len(x_t)):
-            EMA = gamma_*x_t[ti] + (1-gamma_)*EMA
-            x_t[ti] = EMA
+        for t_i in range(len(x_t)):
+            ema = gamma_*x_t[t_i] + (1-gamma_)*ema
+            x_t[t_i] = ema
 
         x_to_smooth[idx] = x_t
     df[col] = x_to_smooth
-    
+
 # Hash the ticker to create a categorical feature
 from sklearn.feature_extraction import FeatureHasher
 h = FeatureHasher(n_features = len(tickers), input_type = 'string')
@@ -180,60 +180,64 @@ target_dict = defaultdict(list)
 for h in horizons:
     n = h # n-day ahead return
     q = h # q-day window
-    
+
     # At the ticker level, lead the AdjClose column n-trading days
     AdjClose_ahead = target_gen.groupby('ticker')['AdjClose'].shift(-n)
     AdjClose_ahead.name = 'AdjClose_ahead'
     
     snp_ahead = target_gen.groupby('ticker')['snp500_close'].shift(-n)
     snp_ahead.name = 'snp_ahead'
-    
+
     # Raw returns
-    target_return = np.array(100*((AdjClose_ahead - target_gen['AdjClose'])/target_gen['AdjClose']))
-    
+    target_return = np.array(100*((AdjClose_ahead - target_gen['AdjClose']) /
+                                  target_gen['AdjClose']))
+
     # Market residualized returns
     target_return_res = target_return - np.array(target_gen['beta'].tolist())*target_return
-    
+
     # Computing all of the returns for the next 21 days (month) relative to today
     aheads = []
     for i in range(0,n+1):
         AdjClose_ahead_i = target_gen.groupby('ticker')['AdjClose'].shift(-i)
-        aheads.append(np.array(100*((AdjClose_ahead_i - target_gen['AdjClose'])/target_gen['AdjClose'])))
-    
+        aheads.append(np.array(100*((AdjClose_ahead_i - target_gen['AdjClose']) /
+                                    target_gen['AdjClose'])))
+
     # Composite, average returns
     target_composite = np.array(pd.DataFrame(aheads).mean(axis=0, skipna=False).tolist())
-    
+
     # q-day moving average of n-day ahead returns, where n=q
-    target_gen['returns_ahead'] = 100*((AdjClose_ahead - target_gen['AdjClose'])/target_gen['AdjClose'])
+    target_gen['returns_ahead'] = 100*((AdjClose_ahead - target_gen['AdjClose']) /
+                                       target_gen['AdjClose'])
     target_average = np.array(target_gen.groupby('ticker')['returns_ahead'].rolling(q).mean())
-    
+
     # Rank target, binarized
     target_rank = target_gen.groupby('ticker')['Monthly_Return_Rank'].shift(-n)
     target_rank = np.where(np.isnan(target_rank), np.nan,
                   np.where(target_rank < rank_threshold, 1, 0))
     target_rank = target_rank.tolist()
-    
+
     # Simple 'up' target, relative to today
     target_up = np.where(np.isnan(AdjClose_ahead), np.nan,
                 np.where(AdjClose_ahead > target_gen['AdjClose'], 1, 0))
     target_up = target_up.tolist()
-    
+
     # Returns, relative to the S&P 500
-    snp_return = np.array(100*((snp_ahead - target_gen['snp500_close'])/target_gen['snp500_close']))
+    snp_return = np.array(100*((snp_ahead - target_gen['snp500_close']) /
+                               target_gen['snp500_close']))
     target_rel_return = target_return - snp_return
-    
+
     # S&P Month Return
     target_snp_return = target_gen.groupby('ticker')['SPY_Trailing_Month_Return'].shift(-n)
-    
+
     # Month Return
     target_month_return = target_gen.groupby('ticker')['Pct_Change_Monthly'].shift(-n)
-    
+
     # 'Up' target, relative to today
     target_rel_up = np.where(np.isnan(target_month_return), np.nan,
                     np.where(target_month_return > target_snp_return, 1, 0))
     target_rel_up = target_rel_up.tolist()
-    
-    
+
+
     # Generate keys based on horizon
     return_key = "target_{}_return".format(n)
     return_res_key = "target_{}_return_res".format(n)
@@ -243,7 +247,7 @@ for h in horizons:
     up_key = "target_{}_up".format(n)
     rel_return_key = "target_{}_rel_return".format(n)
     rel_up_key = "target_{}_rel_up".format(n)
-    
+
     # Store
     target_dict[return_key] = target_return
     target_dict[return_res_key] = target_return_res
