@@ -6,6 +6,7 @@ Modeling Functions
 Jared Berry
 """
 # Quality of life
+import warnings
 import time
 import re
 import pickle
@@ -26,6 +27,8 @@ from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from lightgbm import LGBMClassifier
+
+warnings.filterwarnings('ignore')
 
 def slugify(value):
     """
@@ -294,7 +297,8 @@ def fit_sklearn_classifier(X, y, holdout, ticker, ema_gamma, n_splits, model, la
 
     split_counter = 1
     for train_indices, test_indices in splits:
-        print("Training model on validation split #{}".format(split_counter))
+        if ('recur' or 'window') not in cv_method:
+            print("Training model on validation split #{}".format(split_counter))
 
         # Train/test split
         train_features, train_targets = features[train_indices], targets_smoothed[train_indices]
@@ -444,7 +448,8 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
 
     split_counter = 1
     for train_indices, test_indices in splits:
-        print("Training model on validation split #{}".format(split_counter))
+        if ('recur' or 'window') not in cv_method:
+            print("Training model on validation split #{}".format(split_counter))
 
         # Train/test split
         train_features, train_targets = features[train_indices], targets_smoothed[train_indices]
