@@ -104,7 +104,7 @@ def main(key, statement_types, years, quarters):
     tickers, sim_ids = simfin_setup.load_sim_ids()
 
     # Load process file if boolean specified in driver to avoid extra pulls
-    if driver.use_process_file:
+    if driver.USE_PROCESS_FILE:
         try:
             process_file = pd.read_csv('process_file.csv')
             cols = process_file.columns.tolist()
@@ -121,7 +121,7 @@ def main(key, statement_types, years, quarters):
         for y in years:
             for q in quarters:
 
-                if driver.use_process_file:
+                if driver.USE_PROCESS_FILE:
                     file_id = (s, int(y), q)
                     if file_id in file_ids:
                         continue
@@ -141,16 +141,16 @@ def main(key, statement_types, years, quarters):
                 simfin_statement_data.to_csv('{}.csv'.format(fname), index=False)
 
                 # Record in process file, if boolean specified in driver
-                if driver.use_process_file:
+                if driver.USE_PROCESS_FILE:
                     new_entry = pd.DataFrame([file_id], columns=cols)
                     process_file = process_file.append(new_entry)
 
-    if driver.use_process_file:
+    if driver.USE_PROCESS_FILE:
         process_file.to_csv('process_file.csv', index=False)
     else:
         print("This was run without the process file.")
         print("Be sure to append what you've processed for later ingestion!")
 
 if __name__ == '__main__':
-    main(driver.key, driver.statement_types, driver.years, driver.quarters)
+    main(driver.KEY, driver.STATEMENT_TYPES, driver.YEARS, driver.QUARTERS)
     

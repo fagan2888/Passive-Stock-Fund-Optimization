@@ -137,5 +137,5 @@ def main(key):
     simfin_share_price_data.to_csv('{}.csv'.format(fname), index=False)
 
 if __name__ == '__main__':
-    main(driver.key)
+    main(driver.KEY)
     

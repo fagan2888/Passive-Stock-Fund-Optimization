@@ -37,7 +37,7 @@ def main():
     # conn = c.connection
 
     # Read data into memory - Add SQL pulls
-    if driver.pull_from_sql:
+    if driver.PULL_SQL:
         print("Not hooked up")
         quit()
     else:
