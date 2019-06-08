@@ -4,13 +4,12 @@ from pandas_datareader import data
 import os
 import contextlib
 import time
-import PIL, os, numpy as np, math, collections, threading, json,  random, scipy#, cv2
+import PIL, os, numpy as np, math, collections, threading, json,  random, scipy
 import pandas as pd, pickle, sys, itertools, string, sys, re, datetime, time, shutil, copy
 import os.path
 from os import path
 import sqlite3
 from sqlalchemy import create_engine
-
 
 
 
@@ -28,29 +27,26 @@ def pull_spy_list():
 def load_table(file_name,table_name):
     engine = create_engine("postgresql://postgres:dfdk#418!@@34.74.173.183/postgres")
     df=pd.read_csv(file_name)
-    df['sno']=df.index
-    #df['symbol']=df[' Symbol']
-    columns = ['sno','date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose','Symbol','Year','Month','Week','Day','Dayofweek','Dayofyear','Is_month_end','Is_month_start','Is_quarter_end','Is_quarter_start','Is_year_end','Is_year_start','Elapsed'] 
+    df['Sno']=df.index
+    df['symbol']=df[' Symbol']
+    columns = ['Sno','date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'Adj Close','symbol','Year','Month','Week','Day','Dayofweek','Dayofyear','Is_month_end','Is_month_start','Is_quarter_end','Is_quarter_start','Is_year_end','Is_year_start','Elapsed'] 
     df[columns].to_sql(table_name,engine, if_exists='append',index=False)
-
-
 
 def save_to_database():
     DBPATH='/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/capstone.db'
     cnx = sqlite3.connect(DBPATH)
     df = pd.read_csv('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv')
-    df.to_sql('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price', cnx)   
+    df.to_sql('stock_price', cnx)   
 
 def find_max_date():
-
     engine = create_engine("postgresql://postgres:dfdk#418!@@34.74.173.183/postgres")
-    df=pd.read_sql_query('select max(date_of_transaction) as date_of_transaction from stock_price',con=engine)
-    last_pulled_date=df['date_of_transaction'].max()    
+    df=pd.read_sql_query('select max(date_of_transaction) as date_of_transaction from spy_stock_price',con=engine)
+    last_pulled_date=df['date_of_transaction'].max()
 
-    #exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv')
+    #exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv')
 
     #if exists:
-    #    df = pd.read_csv('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv')
+    #    df = pd.read_csv('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv')
     #    last_pulled_date=df['date_of_transaction'].max()
     #else:
     #    last_pulled_date=dt.date(2011, 1, 1)
@@ -102,80 +98,78 @@ def add_datepart(df, fldname, drop=True, time=False, errors="raise"):
 def main():
 
     
-    #Change the directory 
-    os.chdir('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data')
     #Pull the list of S&P Stocks
-
-    exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv')
     
-    
-        
-    if exists:
-        os.remove('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv')
     
 
     #Saving SPY List to a csv file
     #with atomic_overwrite("spy_list.csv") as f:
-    exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_list.csv')
+    exists = os.path.isfile('Data/spy_list.csv')
     if exists:
         pass
     else:
         spylist = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
         table = spylist[0]
-        table.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_list.csv', header=True, index=None, mode='a', sep=',')
+        table.to_csv(r'Data/spy_list.csv', header=True, index=None, mode='a', sep=',')
     
     
-    df=pd.read_csv('spy_list.csv')
+    df=pd.read_csv('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_list.csv')
 
     
     
     
     count=0
     last_pulled_date=find_max_date()
-    #last_pulled_date=dt.date(2019, 5, 29)
+    #last_pulled_date2=datetime.date(int(last_pulled_date.split('-')[0]),int(last_pulled_date.split('-')[1]),int(last_pulled_date.split('-')[2]))+ datetime.timedelta(days=1)
+
 
     #Increasing to next date
     last_pulled_date2=datetime.date(int(last_pulled_date.split('-')[0]),int(last_pulled_date.split('-')[1]),int(last_pulled_date.split('-')[2]))+ datetime.timedelta(days=1)
 
-    print (last_pulled_date2)
-    
+    #print (last_pulled_date2)
+    exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_spy_stock_price.csv')
 
-    for v in df['Symbol']:
+    lst=["SPY"]
+
+    if exists:
+        os.remove('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_spy_stock_price.csv')
+  
+
+
+    for v in lst:
         stock = data.DataReader(name=v.replace('.','-'),data_source="yahoo", start=last_pulled_date2, end=dt.datetime.now())
         stock['Symbol']=v
-        exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv')
+        exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_spy_stock_price.csv')
+
         if exists:
             
-            stock.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv', header=False, index=True, mode='a', sep=',')
+            stock.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_spy_stock_price.csv', header=False, index=True, mode='a', sep=',')
         else:
             
-            stock.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv', header=True, index=True, mode='a', sep=',')
+            stock.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_spy_stock_price.csv', header=True, index=True, mode='a', sep=',')
         count=count+1
 
-    df = pd.read_csv('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/basic_stock_price.csv')
-    print( df['date_of_transaction'].min(), df['Date'].max())
-    df.columns = ['date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose','Symbol']
+    df = pd.read_csv('Data/basic_spy_stock_price.csv')
+    print( df['Date'].min(), df['Date'].max())
+    df.columns = ['date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'Adj Close',' Symbol']
     print(df.head())
     add_datepart(df, 'date_of_transaction')
-    df.columns = ['date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'AdjClose','Symbol','Year','Month','Week','Day','Dayofweek','Dayofyear','Is_month_end','Is_month_start','Is_quarter_end','Is_quarter_start','Is_year_end','Is_year_start','Elapsed'] 
+    df.columns = ['date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'Adj Close',' Symbol','Year','Month','Week','Day','Dayofweek','Dayofyear','Is_month_end','Is_month_start','Is_quarter_end','Is_quarter_start','Is_year_end','Is_year_start','Elapsed'] 
+    df.reset_index()
+    df.columns = ['date_of_transaction', 'High', 'Low', 'Open', 'Close', 'Volume', 'Adj Close',' Symbol','Year','Month','Week','Day','Dayofweek','Dayofyear','Is_month_end','Is_month_start','Is_quarter_end','Is_quarter_start','Is_year_end','Is_year_start','Elapsed'] 
     
     print(df.head())
 
-    exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv')
-    
-    
-        
+    exists = os.path.isfile('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv')
+
     if exists:
-        os.remove('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv')
+        os.remove('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv')
     
 
-    df.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv', header=True, index=True, mode='a', sep=',')
+    df.to_csv(r'/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv', header=True, index=True, mode='a', sep=',')
     
-    #Saving to postgres
-    load_table('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/stock_price.csv','stock_price')
-
     #Saving to sqlite
-    #save_to_database()
+    load_table('/Users/syandra/Documents/Passive-Stock-Fund-Optimization/Yahoo/Data/spy_stock_price.csv','spy_stock_price')
 
 ##############################
 ##Execution
