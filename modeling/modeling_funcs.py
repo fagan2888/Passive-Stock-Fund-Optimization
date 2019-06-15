@@ -2,6 +2,10 @@
 """
 Modeling Functions
 
+Credits:
+https://www.kaggle.com/willkoehrsen/start-here-a-gentle-introduction/notebook
+https://github.com/georgetown-analytics/machine-learning/blob/master/notebook/Wheat%20Classification.ipynb
+
 06/02/2019
 Jared Berry
 """
@@ -155,7 +159,7 @@ def panel_split(n_folds, groups, grouping_var='date_of_transaction'):
                               .tolist())
         yield panel_train_indices, panel_test_indices
 
-def n_day_ahead_split(indexer, train=252, test=21, window=False,
+def n_day_ahead_split(indexer, train=252, test=63, window=False,
                       grouping_var='date_of_transaction'):
     """
     Function to generate time series splits of a panel or time series, provided
@@ -416,7 +420,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
     """
 
     start = time.time()
-    if ('recur' or 'window') in cv_method:
+    if 'recur' in cv_method or 'window' in cv_method:
         n_splits = 1
 
     # Prepare modeling structures - unpack
@@ -466,11 +470,12 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
         if param_search:
             bst = LGBMClassifier(**gsearch_model.best_params_)
         else:
-            bst = LGBMClassifier(n_estimators=1000, objective='binary',
-                                 class_weight='balanced', learning_rate=0.01,
-                                 #max_bin = 25, num_leaves = 25, max_depth = 1,
+            bst = LGBMClassifier(n_estimators=10000, objective='binary',
+                                 class_weight='balanced', learning_rate=0.1,
+                                 max_bin = 25, num_leaves = 25, 
+                                 max_depth = 2,
                                  reg_alpha=0.1, reg_lambda=0.1,
-                                 subsample=0.8, random_state=101
+                                 subsample=0.8
                                 )
 
         # Train the bst
@@ -518,7 +523,7 @@ def fit_lgbm_classifier(X, y, holdout, ticker="", ema_gamma=1, n_splits=12,
         split_counter += 1
 
     # Adjust distributed metrics
-    if ('recur' or 'window') in cv_method:
+    if 'recur' in cv_method or 'window' in cv_method:
         feature_importance_values = feature_importance_values / split_counter
         test_predictions = test_predictions / split_counter
 

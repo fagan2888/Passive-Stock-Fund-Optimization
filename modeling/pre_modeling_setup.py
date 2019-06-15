@@ -16,7 +16,7 @@ import pickle
 # SET-UP ----------------------------------------------------------------------
 
 # Connect to PostgresDB and pull in datasets
-engine = create_engine("postgresql://postgres:dfdk#418!@@34.74.173.183/postgres")
+engine = create_engine("postgresql://postgres:dfdk#418!@@35.237.73.115/postgres")
 
 # Yahoo! Finance
 yahoo=pd.read_sql_query('select * from stock_price', con=engine)

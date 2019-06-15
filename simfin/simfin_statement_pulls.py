@@ -4,6 +4,9 @@ Set up interface with SimFin API using quarter-year-statement inputs to reduce
 API hits and avoid duplicitous pulling/storage of data; standardizes creation
 of intermediary data sets to load into Postgres DB
 
+Credits:
+https://medium.com/@SimFin_official/simfin-api-tutorial-6626c6c1dbeb
+
 04/14/2019
 Jared Berry
 """
