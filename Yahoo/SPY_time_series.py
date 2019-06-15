@@ -24,6 +24,7 @@ def pull_spy_list():
     df=pd.read_csv('Data/spy_list.csv')
     return df
 
+#load table to postgres DB
 def load_table(file_name,table_name):
     engine = create_engine("postgresql://postgres:dfdk#418!@@35.237.73.115/postgres")
     df=pd.read_csv(file_name)

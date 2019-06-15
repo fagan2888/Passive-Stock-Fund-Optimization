@@ -104,9 +104,6 @@ def add_datepart(df, fldname, drop=True, time=False, errors="raise"):
 def main():
 
     
-    #Change the directory 
-    #os.chdir('Data')
-    #Pull the list of S&P Stocks
 
     basic_stock_exists = os.path.isfile('Data/basic_stock_price.csv')
     
@@ -129,15 +126,13 @@ def main():
         table = spylist[0]
         table.to_csv('Data/spy_list.csv', header=True, index=None, mode='a', sep=',')
     
-    
+    #Reading S & P stock list 
     df=pd.read_csv('Data/spy_list.csv')
 
     
     
     
-    count=0
     last_pulled_date=find_max_date()
-    #last_pulled_date=dt.date(2019, 5, 29)
 
     #Increasing to next date
     last_pulled_date2=datetime.date(int(last_pulled_date.split('-')[0]),int(last_pulled_date.split('-')[1]),int(last_pulled_date.split('-')[2]))+ datetime.timedelta(days=1)
