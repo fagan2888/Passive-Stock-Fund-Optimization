@@ -25,6 +25,7 @@ def pull_spy_list():
     df=pd.read_csv('Data/spy_list.csv')
     return df
 
+#loading table to postgres db
 def load_table(file_name,table_name):
     engine = create_engine("postgresql://postgres:dfdk#418!@@35.237.73.115/postgres")
     df=pd.read_csv(file_name)
@@ -41,6 +42,7 @@ def save_to_database():
     df = pd.read_csv('Data/stock_price.csv')
     df.to_sql('Data/stock_price', cnx)   
 
+#Finding the max date
 def find_max_date():
 
     engine = create_engine("postgresql://postgres:dfdk#418!@@35.237.73.115/postgres")
